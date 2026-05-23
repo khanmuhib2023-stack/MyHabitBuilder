@@ -10,7 +10,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useSyncCode } from "@/components/providers/SyncCodeProvider";
 import {
   createCustomCategory,
   deleteCustomCategory,
@@ -127,9 +127,8 @@ function loadLocalBundle() {
 }
 
 export function AppDataProvider({ children }: { children: ReactNode }) {
-  const { user, loading: authLoading } = useAuth();
-  const userId = user?.id ?? null;
-  const isSynced = Boolean(userId && isSupabaseConfigured());
+  const { syncCode, loading: syncLoading } = useSyncCode();
+  const isSynced = Boolean(syncCode && isSupabaseConfigured());
 
   const [hydrated, setHydrated] = useState(false);
   const [dataLoading, setDataLoading] = useState(false);
@@ -161,8 +160,8 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setDataLoading(true);
     setError(null);
     try {
-      if (userId && isSupabaseConfigured()) {
-        const bundle = await fetchCloudBundle(userId);
+      if (syncCode && isSupabaseConfigured()) {
+        const bundle = await fetchCloudBundle(syncCode);
         if (token !== loadToken.current) return;
         applyBundle(bundle);
       } else {
@@ -182,24 +181,24 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         (e.message.includes("JWT") ||
           e.message.includes("401") ||
           e.message.toLowerCase().includes("not authenticated"))
-          ? "Could not load cloud data. Try logging out and back in."
+          ? "Could not load cloud data. Try switching sync code and reconnecting."
           : "Could not load your data. Try again.";
       setError(msg);
-      if (!userId) {
+      if (!syncCode) {
         applyBundle(loadLocalBundle());
       }
     } finally {
       if (token === loadToken.current) setDataLoading(false);
     }
-  }, [userId, applyBundle]);
+  }, [syncCode, applyBundle]);
 
   useEffect(() => {
-    if (authLoading) return;
+    if (syncLoading) return;
     const id = window.setTimeout(() => {
       void loadFromSource().finally(() => setHydrated(true));
     }, 0);
     return () => window.clearTimeout(id);
-  }, [authLoading, userId, loadFromSource]);
+  }, [syncLoading, syncCode, loadFromSource]);
 
   const reload = useCallback(() => {
     void loadFromSource();
@@ -232,7 +231,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
 
   const withCloudSave = useCallback(
     async (fn: () => Promise<void>) => {
-      if (!isSynced || !userId) return;
+      if (!isSynced || !syncCode) return;
       setSaving(true);
       setError(null);
       try {
@@ -243,7 +242,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         setSaving(false);
       }
     },
-    [isSynced, userId]
+    [isSynced, syncCode]
   );
 
   const onValueChange = useCallback(
@@ -256,7 +255,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setValues((prev) => {
         const next = setValueForHabit(prev, ymd, habit, val, source);
         if (!isSynced) saveValues(next);
-        if (isSynced && userId) {
+        if (isSynced && syncCode) {
           const enc = next[ymd]?.[habit.id];
           if (enc) {
             void withCloudSave(async () => {
@@ -264,7 +263,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 encodeValueForCloud(
                   enc,
                   habit,
-                  userId,
+                  syncCode,
                   habit.id,
                   ymd,
                   categoryLabel(categories, habit.category)
@@ -276,15 +275,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [isSynced, userId, categories, withCloudSave]
+    [isSynced, syncCode, categories, withCloudSave]
   );
 
   const onAddHabit = useCallback(
     async (partial: Omit<HabitDefinition, "id">) => {
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         await withCloudSave(async () => {
           const created = await saveCloudHabit(
-            habitToCloudInput(partial, userId, categories)
+            habitToCloudInput(partial, syncCode, categories)
           );
           const nextHabit: HabitDefinition = {
             id: created.id,
@@ -307,7 +306,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [isSynced, userId, categories, withCloudSave]
+    [isSynced, syncCode, categories, withCloudSave]
   );
 
   const onUpdateHabit = useCallback(
@@ -315,12 +314,12 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setDefinitions((prev) => {
         const next = updateHabitDefinition(prev, habitId, patch);
         if (!isSynced) saveDefinitions(next);
-        if (isSynced && userId) {
+        if (isSynced && syncCode) {
           const updated = next.find((h) => h.id === habitId);
           if (updated) {
             void withCloudSave(async () => {
               await updateCloudHabit({
-                ...habitToCloudInput(updated, userId, categories),
+                ...habitToCloudInput(updated, syncCode, categories),
                 id: habitId,
               });
             });
@@ -329,7 +328,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         return next;
       });
     },
-    [isSynced, userId, categories, withCloudSave]
+    [isSynced, syncCode, categories, withCloudSave]
   );
 
   const onDeleteHabit = useCallback(
@@ -339,13 +338,13 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (!isSynced) saveDefinitions(next);
         return next;
       });
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         await withCloudSave(async () => {
-          await deleteCloudHabit(habitId);
+          await deleteCloudHabit(habitId, syncCode);
         });
       }
     },
-    [isSynced, userId, withCloudSave]
+    [isSynced, syncCode, withCloudSave]
   );
 
   const onCreateCategory = useCallback(
@@ -354,10 +353,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (!c) return null;
       const next = sortCategoriesForDisplay([...categories, c]);
       persistCategories(next);
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         void withCloudSave(async () => {
           const row = await saveCloudCategory({
-            user_id: userId,
+            sync_code: syncCode,
             name: c.name,
             is_default: false,
           });
@@ -373,7 +372,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
       return c.id;
     },
-    [categories, persistCategories, isSynced, userId, withCloudSave]
+    [categories, persistCategories, isSynced, syncCode, withCloudSave]
   );
 
   const removeCategoryById = useCallback(
@@ -388,11 +387,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (r.nextCategories) persistCategories(r.nextCategories);
       if (r.nextHabits) {
         persistDefinitions(r.nextHabits);
-        if (isSynced && userId) {
+        if (isSynced && syncCode) {
           await withCloudSave(async () => {
             for (const h of r.nextHabits!) {
               await updateCloudHabit({
-                ...habitToCloudInput(h, userId, r.nextCategories ?? categories),
+                ...habitToCloudInput(h, syncCode, r.nextCategories ?? categories),
                 id: h.id,
               });
             }
@@ -401,7 +400,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
                 /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
                   categoryId
                 );
-              if (isUuid) await deleteCloudCategory(categoryId);
+              if (isUuid) await deleteCloudCategory(categoryId, syncCode);
             }
           });
         }
@@ -414,7 +413,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       persistCategories,
       persistDefinitions,
       isSynced,
-      userId,
+      syncCode,
       withCloudSave,
     ]
   );
@@ -426,10 +425,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         id: newCommentId(),
         createdAt: new Date().toISOString(),
       };
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         await withCloudSave(async () => {
           const row = await addCloudComment({
-            user_id: userId,
+            sync_code: syncCode,
             habit_id: input.habitId || null,
             habit_name: input.habitName,
             category_name: input.habitCategory ?? null,
@@ -448,7 +447,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setComments(next);
       saveHabitComments(next);
     },
-    [comments, isSynced, userId, withCloudSave]
+    [comments, isSynced, syncCode, withCloudSave]
   );
 
   const editComment = useCallback(
@@ -456,7 +455,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       commentId: string,
       patch: Pick<HabitComment, "text" | "sentiment">
     ) => {
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         const existing = comments.find((c) => c.id === commentId);
         if (!existing) return null;
         const trimmed = patch.text.trim();
@@ -473,7 +472,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         await withCloudSave(async () => {
           await updateCloudComment({
             id: commentId,
-            user_id: userId,
+            sync_code: syncCode,
             habit_id: updated.habitId || null,
             habit_name: updated.habitName,
             category_name: updated.habitCategory ?? null,
@@ -487,30 +486,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       if (updated) setComments(getHabitComments());
       return updated;
     },
-    [comments, isSynced, userId, withCloudSave]
+    [comments, isSynced, syncCode, withCloudSave]
   );
 
   const removeComment = useCallback(
     async (commentId: string) => {
-      if (isSynced && userId) {
+      if (isSynced && syncCode) {
         setComments((prev) => prev.filter((c) => c.id !== commentId));
         await withCloudSave(async () => {
-          await deleteCloudComment(commentId);
+          await deleteCloudComment(commentId, syncCode);
         });
         return;
       }
       deleteHabitComment(commentId);
       setComments(getHabitComments());
     },
-    [isSynced, userId, withCloudSave]
+    [isSynced, syncCode, withCloudSave]
   );
 
   const uploadLocal = useCallback(async () => {
-    if (!userId) return "Sign in to upload data.";
+    if (!syncCode) return "Enter a sync code to upload data.";
     setSaving(true);
     setError(null);
     try {
-      const stats = await uploadLocalToCloud(userId);
+      const stats = await uploadLocalToCloud(syncCode);
       await loadFromSource();
       return `Uploaded: ${stats.habits} habits, ${stats.logs} logs, ${stats.categories} categories, ${stats.comments} comments.`;
     } catch {
@@ -519,14 +518,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setSaving(false);
     }
-  }, [userId, loadFromSource]);
+  }, [syncCode, loadFromSource]);
 
   const downloadCloud = useCallback(async () => {
-    if (!userId) return "Sign in to download data.";
+    if (!syncCode) return "Enter a sync code to download data.";
     setSaving(true);
     setError(null);
     try {
-      await downloadCloudToLocal(userId);
+      await downloadCloudToLocal(syncCode);
       await loadFromSource();
       return "Cloud data saved to this device.";
     } catch {
@@ -535,7 +534,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     } finally {
       setSaving(false);
     }
-  }, [userId, loadFromSource]);
+  }, [syncCode, loadFromSource]);
 
   const value = useMemo(
     () => ({

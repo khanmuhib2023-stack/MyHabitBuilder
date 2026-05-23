@@ -140,12 +140,12 @@ export function cloudBundleToApp(
   return { definitions, values, categories, comments };
 }
 
-export async function fetchCloudBundle(userId: string) {
+export async function fetchCloudBundle(syncCode: string) {
   const [cloudCats, cloudHabits, cloudLogs, cloudComments] = await Promise.all([
-    getCloudCategories(userId),
-    getCloudHabits(userId),
-    getCloudLogs(userId),
-    getCloudComments(userId),
+    getCloudCategories(syncCode),
+    getCloudHabits(syncCode),
+    getCloudLogs(syncCode),
+    getCloudComments(syncCode),
   ]);
   return cloudBundleToApp(
     cloudCats,
@@ -167,12 +167,12 @@ export function writeLocalBackup(bundle: {
   saveHabitComments(bundle.comments);
 }
 
-export async function downloadCloudToLocal(userId: string): Promise<void> {
-  const bundle = await fetchCloudBundle(userId);
+export async function downloadCloudToLocal(syncCode: string): Promise<void> {
+  const bundle = await fetchCloudBundle(syncCode);
   writeLocalBackup(bundle);
 }
 
-export async function uploadLocalToCloud(userId: string): Promise<{
+export async function uploadLocalToCloud(syncCode: string): Promise<{
   habits: number;
   logs: number;
   categories: number;
@@ -183,10 +183,10 @@ export async function uploadLocalToCloud(userId: string): Promise<{
   const localValues = loadValues();
   const localComments = getHabitComments();
 
-  const existingCats = await getCloudCategories(userId);
-  const existingHabits = await getCloudHabits(userId);
-  const existingLogs = await getCloudLogs(userId);
-  const existingComments = await getCloudComments(userId);
+  const existingCats = await getCloudCategories(syncCode);
+  const existingHabits = await getCloudHabits(syncCode);
+  const existingLogs = await getCloudLogs(syncCode);
+  const existingComments = await getCloudComments(syncCode);
 
   const catNameToCloudId = new Map<string, string>();
   for (const c of existingCats) {
@@ -201,7 +201,7 @@ export async function uploadLocalToCloud(userId: string): Promise<{
       continue;
     }
     const row = await saveCloudCategory({
-      user_id: userId,
+      sync_code: syncCode,
       name: cat.name,
       is_default: false,
     });
@@ -223,7 +223,7 @@ export async function uploadLocalToCloud(userId: string): Promise<{
     if (byName) {
       localIdToCloudId.set(habit.id, byName);
       await updateCloudHabit({
-        ...habitToCloudInput(habit, userId, localCats),
+        ...habitToCloudInput(habit, syncCode, localCats),
         id: byName,
       });
       continue;
@@ -231,13 +231,13 @@ export async function uploadLocalToCloud(userId: string): Promise<{
     if (isUuid(habit.id) && existingHabits.some((h) => h.id === habit.id)) {
       localIdToCloudId.set(habit.id, habit.id);
       await updateCloudHabit({
-        ...habitToCloudInput(habit, userId, localCats),
+        ...habitToCloudInput(habit, syncCode, localCats),
         id: habit.id,
       });
       continue;
     }
     const created = await saveCloudHabit(
-      habitToCloudInput(habit, userId, localCats)
+      habitToCloudInput(habit, syncCode, localCats)
     );
     localIdToCloudId.set(habit.id, created.id);
     habitKeyToCloudId.set(habit.name.toLowerCase(), created.id);
@@ -262,7 +262,7 @@ export async function uploadLocalToCloud(userId: string): Promise<{
       const payload = encodeValueForCloud(
         enc,
         habit,
-        userId,
+        syncCode,
         cloudHabitId,
         ymd,
         categoryNameForId(localCats, habit.category)
@@ -282,7 +282,7 @@ export async function uploadLocalToCloud(userId: string): Promise<{
       localIdToCloudId.get(c.habitId) ??
       (isUuid(c.habitId) ? c.habitId : null);
     await addCloudComment({
-      user_id: userId,
+      sync_code: syncCode,
       habit_id: cloudHabitId,
       habit_name: c.habitName,
       category_name: c.habitCategory ?? null,

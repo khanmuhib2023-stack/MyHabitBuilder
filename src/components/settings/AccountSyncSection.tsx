@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useSyncCode } from "@/components/providers/SyncCodeProvider";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import Link from "next/link";
 import {
@@ -12,12 +12,12 @@ import {
   exportHabitsCsv,
 } from "@/lib/exportUtils";
 import { ui } from "@/lib/uiClasses";
-import { missingSupabaseConfigMessage } from "@/lib/authErrors";
+import { missingSupabaseConfigMessage } from "@/lib/syncCodeErrors";
 
 const cardBtn = `w-full px-4 py-3 text-left text-sm font-medium ${ui.settingsBtn}`;
 
 export default function AccountSyncSection() {
-  const { user, signOut, configured } = useAuth();
+  const { syncCode, clearSyncCode, configured } = useSyncCode();
   const {
     isSynced,
     saving,
@@ -42,33 +42,37 @@ export default function AccountSyncSection() {
       <section className="space-y-4">
         <div>
           <h2 className="text-lg font-semibold text-[var(--foreground)]">
-            Account
+            Sync code
           </h2>
           <p className="mt-1 text-sm text-[var(--foreground)]/50">
-            {user
-              ? `Signed in as ${user.email}`
-              : "Sign in to sync data across devices."}
+            {syncCode
+              ? `Connected with code “${syncCode}”`
+              : "Enter a sync code to share data across devices."}
           </p>
         </div>
+        <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
+          Temporary testing mode: anyone with your sync code can access this
+          data. Not for production use.
+        </p>
         {!configured ? (
           <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
             {missingSupabaseConfigMessage()}
           </p>
         ) : null}
-        {user ? (
+        {syncCode ? (
           <button
             type="button"
-            onClick={() => void signOut()}
+            onClick={() => clearSyncCode()}
             className="rounded-xl border border-[var(--foreground)]/12 px-4 py-2.5 text-sm font-medium text-[var(--foreground)] transition hover:bg-[var(--foreground)]/8"
           >
-            Log out
+            Switch sync code
           </button>
         ) : (
           <Link
             href="/login"
             className="inline-block rounded-xl bg-[var(--foreground)] px-4 py-2.5 text-sm font-medium text-[var(--background)] transition hover:opacity-90"
           >
-            Log in or sign up
+            Enter sync code
           </Link>
         )}
       </section>
@@ -80,15 +84,15 @@ export default function AccountSyncSection() {
           </h2>
           <p className="mt-1 text-sm text-[var(--foreground)]/50">
             {isSynced
-              ? "Logged in: data syncs across devices."
-              : "Logged out: data is stored only in this browser."}
+              ? "Connected: data loads from Supabase for your sync code."
+              : "No sync code: data is stored only in this browser."}
           </p>
         </div>
 
         <div className={`px-4 py-3 text-sm text-[var(--foreground)]/70 ${ui.surfaceInset}`}>
           <p className="font-medium text-[var(--foreground)]">Storage status</p>
           <p className="mt-1 text-[var(--foreground)]/55">
-            {isSynced ? "Synced (cloud + local backup)" : "Local only"}
+            {isSynced ? "Cloud (sync code)" : "Local only"}
           </p>
         </div>
 
@@ -108,7 +112,7 @@ export default function AccountSyncSection() {
           </p>
         ) : null}
 
-        {user ? (
+        {syncCode ? (
           <div className="grid gap-2 sm:grid-cols-2">
             <button
               type="button"

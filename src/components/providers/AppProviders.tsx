@@ -1,13 +1,13 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { AuthProvider } from "@/components/providers/AuthProvider";
+import { SyncCodeProvider } from "@/components/providers/SyncCodeProvider";
 import { AppDataProvider } from "@/components/providers/AppDataProvider";
 
 export default function AppProviders({ children }: { children: ReactNode }) {
   return (
-    <AuthProvider>
+    <SyncCodeProvider>
       <AppDataProvider>{children}</AppDataProvider>
-    </AuthProvider>
+    </SyncCodeProvider>
   );
 }

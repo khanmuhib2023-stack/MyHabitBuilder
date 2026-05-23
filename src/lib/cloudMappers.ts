@@ -22,13 +22,13 @@ function isDefaultCategoryId(id: string): id is DefaultCategoryId {
 
 export function habitToCloudInput(
   habit: Omit<HabitDefinition, "id"> & { id?: string },
-  userId: string,
+  syncCode: string,
   cats: FlexCategory[]
 ): CloudHabitInput {
   const categoryName = categoryLabel(cats, habit.category);
   const isDefault = isDefaultCategoryId(habit.category);
   return {
-    user_id: userId,
+    sync_code: syncCode,
     name: habit.name,
     category_id: isDefault ? null : habit.category,
     category_name: isDefault
@@ -44,7 +44,7 @@ export function habitToCloudInput(
 export function encodeValueForCloud(
   enc: EncodedValue,
   habit: HabitDefinition,
-  userId: string,
+  syncCode: string,
   habitId: string,
   logDate: string,
   categoryName: string
@@ -52,7 +52,7 @@ export function encodeValueForCloud(
   const source = enc.s === "d" ? "default" : "manual";
   const ts = `${logDate}T12:00:00.000Z`;
   const base = {
-    user_id: userId,
+    sync_code: syncCode,
     habit_id: habitId,
     habit_name: habit.name,
     category_name: categoryName,

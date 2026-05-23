@@ -1,10 +1,9 @@
 import type { HabitDefaultValue, HabitTarget, HabitType } from "@/lib/flexHabitTypes";
-import type { HabitComment } from "@/lib/types";
 import { getSupabase } from "@/lib/supabaseClient";
 
 export type CloudCategory = {
   id: string;
-  user_id: string;
+  sync_code: string;
   name: string;
   is_default: boolean;
   created_at: string;
@@ -12,7 +11,7 @@ export type CloudCategory = {
 
 export type CloudHabit = {
   id: string;
-  user_id: string;
+  sync_code: string;
   name: string;
   category_id: string | null;
   category_name: string | null;
@@ -26,7 +25,7 @@ export type CloudHabit = {
 
 export type CloudLog = {
   id: string;
-  user_id: string;
+  sync_code: string;
   habit_id: string | null;
   habit_name: string;
   category_name: string | null;
@@ -43,7 +42,7 @@ export type CloudLog = {
 
 export type CloudComment = {
   id: string;
-  user_id: string;
+  sync_code: string;
   habit_id: string | null;
   habit_name: string;
   category_name: string | null;
@@ -55,7 +54,7 @@ export type CloudComment = {
 
 export type CloudHabitInput = {
   id?: string;
-  user_id: string;
+  sync_code: string;
   name: string;
   category_id?: string | null;
   category_name?: string | null;
@@ -66,7 +65,7 @@ export type CloudHabitInput = {
 };
 
 export type CloudLogInput = {
-  user_id: string;
+  sync_code: string;
   habit_id: string | null;
   habit_name: string;
   category_name?: string | null;
@@ -80,14 +79,14 @@ export type CloudLogInput = {
 };
 
 export type CloudCategoryInput = {
-  user_id: string;
+  sync_code: string;
   name: string;
   is_default?: boolean;
 };
 
 export type CloudCommentInput = {
   id?: string;
-  user_id: string;
+  sync_code: string;
   habit_id: string | null;
   habit_name: string;
   category_name?: string | null;
@@ -103,11 +102,11 @@ function supabaseOrThrow() {
   return sb;
 }
 
-export async function getCloudHabits(userId: string): Promise<CloudHabit[]> {
+export async function getCloudHabits(syncCode: string): Promise<CloudHabit[]> {
   const { data, error } = await supabaseOrThrow()
     .from("habits")
     .select("*")
-    .eq("user_id", userId)
+    .eq("sync_code", syncCode)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as CloudHabit[];
@@ -117,7 +116,7 @@ export async function saveCloudHabit(
   habit: CloudHabitInput
 ): Promise<CloudHabit> {
   const row = {
-    user_id: habit.user_id,
+    sync_code: habit.sync_code,
     name: habit.name,
     category_id: habit.category_id ?? null,
     category_name: habit.category_name ?? null,
@@ -152,26 +151,30 @@ export async function updateCloudHabit(
       updated_at: new Date().toISOString(),
     })
     .eq("id", habit.id)
-    .eq("user_id", habit.user_id)
+    .eq("sync_code", habit.sync_code)
     .select()
     .single();
   if (error) throw error;
   return data as CloudHabit;
 }
 
-export async function deleteCloudHabit(habitId: string): Promise<void> {
+export async function deleteCloudHabit(
+  habitId: string,
+  syncCode: string
+): Promise<void> {
   const { error } = await supabaseOrThrow()
     .from("habits")
     .delete()
-    .eq("id", habitId);
+    .eq("id", habitId)
+    .eq("sync_code", syncCode);
   if (error) throw error;
 }
 
-export async function getCloudLogs(userId: string): Promise<CloudLog[]> {
+export async function getCloudLogs(syncCode: string): Promise<CloudLog[]> {
   const { data, error } = await supabaseOrThrow()
     .from("habit_logs")
     .select("*")
-    .eq("user_id", userId)
+    .eq("sync_code", syncCode)
     .order("log_date", { ascending: true });
   if (error) throw error;
   return (data ?? []) as CloudLog[];
@@ -179,7 +182,7 @@ export async function getCloudLogs(userId: string): Promise<CloudLog[]> {
 
 export async function upsertCloudLog(log: CloudLogInput): Promise<CloudLog> {
   const row = {
-    user_id: log.user_id,
+    sync_code: log.sync_code,
     habit_id: log.habit_id,
     habit_name: log.habit_name,
     category_name: log.category_name ?? null,
@@ -193,18 +196,20 @@ export async function upsertCloudLog(log: CloudLogInput): Promise<CloudLog> {
   };
   const { data, error } = await supabaseOrThrow()
     .from("habit_logs")
-    .upsert(row, { onConflict: "user_id,habit_id,log_date" })
+    .upsert(row, { onConflict: "sync_code,habit_id,log_date" })
     .select()
     .single();
   if (error) throw error;
   return data as CloudLog;
 }
 
-export async function getCloudCategories(userId: string): Promise<CloudCategory[]> {
+export async function getCloudCategories(
+  syncCode: string
+): Promise<CloudCategory[]> {
   const { data, error } = await supabaseOrThrow()
     .from("categories")
     .select("*")
-    .eq("user_id", userId)
+    .eq("sync_code", syncCode)
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as CloudCategory[];
@@ -216,7 +221,7 @@ export async function saveCloudCategory(
   const { data, error } = await supabaseOrThrow()
     .from("categories")
     .insert({
-      user_id: category.user_id,
+      sync_code: category.sync_code,
       name: category.name,
       is_default: category.is_default ?? false,
     })
@@ -226,19 +231,25 @@ export async function saveCloudCategory(
   return data as CloudCategory;
 }
 
-export async function deleteCloudCategory(categoryId: string): Promise<void> {
+export async function deleteCloudCategory(
+  categoryId: string,
+  syncCode: string
+): Promise<void> {
   const { error } = await supabaseOrThrow()
     .from("categories")
     .delete()
-    .eq("id", categoryId);
+    .eq("id", categoryId)
+    .eq("sync_code", syncCode);
   if (error) throw error;
 }
 
-export async function getCloudComments(userId: string): Promise<CloudComment[]> {
+export async function getCloudComments(
+  syncCode: string
+): Promise<CloudComment[]> {
   const { data, error } = await supabaseOrThrow()
     .from("habit_comments")
     .select("*")
-    .eq("user_id", userId)
+    .eq("sync_code", syncCode)
     .order("created_at", { ascending: false });
   if (error) throw error;
   return (data ?? []) as CloudComment[];
@@ -250,7 +261,7 @@ export async function addCloudComment(
   const { data, error } = await supabaseOrThrow()
     .from("habit_comments")
     .insert({
-      user_id: comment.user_id,
+      sync_code: comment.sync_code,
       habit_id: comment.habit_id,
       habit_name: comment.habit_name,
       category_name: comment.category_name ?? null,
@@ -276,17 +287,21 @@ export async function updateCloudComment(
       updated_at: new Date().toISOString(),
     })
     .eq("id", comment.id)
-    .eq("user_id", comment.user_id)
+    .eq("sync_code", comment.sync_code)
     .select()
     .single();
   if (error) throw error;
   return data as CloudComment;
 }
 
-export async function deleteCloudComment(commentId: string): Promise<void> {
+export async function deleteCloudComment(
+  commentId: string,
+  syncCode: string
+): Promise<void> {
   const { error } = await supabaseOrThrow()
     .from("habit_comments")
     .delete()
-    .eq("id", commentId);
+    .eq("id", commentId)
+    .eq("sync_code", syncCode);
   if (error) throw error;
 }

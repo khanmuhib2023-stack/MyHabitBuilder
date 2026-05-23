@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useAuth } from "@/components/providers/AuthProvider";
+import { useSyncCode } from "@/components/providers/SyncCodeProvider";
 
 export default function UserMenu() {
-  const { user, loading, signOut } = useAuth();
+  const { syncCode, loading, clearSyncCode } = useSyncCode();
 
   if (loading) {
     return (
@@ -12,13 +12,13 @@ export default function UserMenu() {
     );
   }
 
-  if (!user) {
+  if (!syncCode) {
     return (
       <Link
         href="/login"
         className="rounded-full px-3 py-2 text-sm font-medium text-[var(--foreground)]/55 transition hover:bg-[var(--foreground)]/8 hover:text-[var(--foreground)]"
       >
-        Login
+        Sync code
       </Link>
     );
   }
@@ -26,17 +26,17 @@ export default function UserMenu() {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span
-        className="max-w-[140px] truncate text-xs text-[var(--foreground)]/50"
-        title={user.email ?? ""}
+        className="max-w-[120px] truncate text-xs text-[var(--foreground)]/50"
+        title={syncCode}
       >
-        {user.email}
+        {syncCode}
       </span>
       <button
         type="button"
-        onClick={() => void signOut()}
+        onClick={() => clearSyncCode()}
         className="rounded-full px-3 py-2 text-sm font-medium text-[var(--foreground)]/55 transition hover:bg-[var(--foreground)]/8 hover:text-[var(--foreground)]"
       >
-        Log out
+        Switch code
       </button>
     </div>
   );
