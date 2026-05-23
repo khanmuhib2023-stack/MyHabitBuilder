@@ -176,9 +176,16 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         if (token !== loadToken.current) return;
         applyBundle(bundle);
       }
-    } catch {
+    } catch (e) {
       if (token !== loadToken.current) return;
-      setError("Could not load your data. Try again.");
+      const msg =
+        e instanceof Error &&
+        (e.message.includes("JWT") ||
+          e.message.includes("401") ||
+          e.message.toLowerCase().includes("not authenticated"))
+          ? "Could not load cloud data. Try logging out and back in."
+          : "Could not load your data. Try again.";
+      setError(msg);
       const bundle = loadLocalBundle();
       applyBundle(bundle);
     } finally {

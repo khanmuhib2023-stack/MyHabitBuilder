@@ -2,6 +2,7 @@
 
 import CategoryManager from "@/components/CategoryManager";
 import AccountSyncSection from "@/components/settings/AccountSyncSection";
+import AuthDebugPanel from "@/components/settings/AuthDebugPanel";
 import DataImportExportSection from "@/components/settings/DataImportExportSection";
 
 export default function SettingsPage() {
@@ -17,6 +18,7 @@ export default function SettingsPage() {
       </header>
 
       <div className="space-y-10">
+        <AuthDebugPanel />
         <AccountSyncSection />
         <CategoryManager />
         <DataImportExportSection />

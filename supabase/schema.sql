@@ -1,4 +1,9 @@
 -- Habit Processor — run in Supabase SQL Editor
+--
+-- After deploy, in Supabase → Authentication → URL Configuration:
+--   Site URL = your production app URL
+--   Redirect URLs = production URL/** and http://localhost:3000/**
+-- Confirm email links must reach /auth/callback on your app.
 
 -- Optional profile row per user
 create table if not exists public.profiles (

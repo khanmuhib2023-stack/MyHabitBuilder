@@ -12,6 +12,7 @@ import {
   exportHabitsCsv,
 } from "@/lib/exportUtils";
 import { ui } from "@/lib/uiClasses";
+import { missingSupabaseConfigMessage } from "@/lib/authErrors";
 
 const cardBtn = `w-full px-4 py-3 text-left text-sm font-medium ${ui.settingsBtn}`;
 
@@ -51,8 +52,7 @@ export default function AccountSyncSection() {
         </div>
         {!configured ? (
           <p className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-sm text-amber-200/90">
-            Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and
-            NEXT_PUBLIC_SUPABASE_ANON_KEY to .env.local
+            {missingSupabaseConfigMessage()}
           </p>
         ) : null}
         {user ? (
