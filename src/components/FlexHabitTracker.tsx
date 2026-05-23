@@ -16,7 +16,7 @@ import {
   DEFAULT_CATEGORY_IDS,
   type DefaultCategoryId,
 } from "@/lib/flexHabitTypes";
-import { categoryLabel } from "@/lib/categoryUtils";
+import { categoryLabel, resolveHabitCategoryId } from "@/lib/categoryUtils";
 import { habitCountInCategory } from "@/lib/categoryDelete";
 import { useAppData } from "@/components/providers/AppDataProvider";
 import { toYmd } from "@/lib/weekRange";
@@ -39,6 +39,8 @@ export default function FlexHabitTracker() {
   const {
     hydrated,
     dataLoading,
+    error,
+    clearError,
     definitions,
     values,
     categories,
@@ -92,8 +94,9 @@ export default function FlexHabitTracker() {
     const map: Record<string, HabitDefinition[]> = {};
     for (const c of categories) map[c.id] = [];
     for (const h of definitions) {
-      if (!map[h.category]) map[h.category] = [];
-      map[h.category].push(h);
+      const key = resolveHabitCategoryId(h.category, categories);
+      if (!map[key]) map[key] = [];
+      map[key].push(h);
     }
     return map;
   }, [definitions, categories]);
@@ -107,8 +110,8 @@ export default function FlexHabitTracker() {
   );
 
   const onAdd = useCallback(
-    (habit: Omit<HabitDefinition, "id">) => {
-      void onAddHabit(habit);
+    async (habit: Omit<HabitDefinition, "id">) => {
+      return onAddHabit(habit);
     },
     [onAddHabit]
   );
@@ -226,6 +229,22 @@ export default function FlexHabitTracker() {
           </button>
         </div>
       </header>
+
+      {error ? (
+        <p
+          className="mb-4 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2.5 text-sm text-red-300/90"
+          role="alert"
+        >
+          {error}
+          <button
+            type="button"
+            onClick={clearError}
+            className="ml-2 underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </p>
+      ) : null}
 
       <div className="space-y-3">
         {categories.map((cat) => (

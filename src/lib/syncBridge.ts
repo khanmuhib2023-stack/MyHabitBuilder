@@ -35,7 +35,12 @@ import {
 } from "@/lib/flexHabitStorage";
 import { getHabitComments, saveHabitComments } from "@/lib/commentStorage";
 import type { HabitComment } from "@/lib/types";
-import { categoryLabel, loadCategories } from "@/lib/categoryUtils";
+import {
+  categoryLabel,
+  ensureDefaultCategories,
+  loadCategories,
+  resolveHabitCategoryId,
+} from "@/lib/categoryUtils";
 import {
   decodeValueFromCloud,
   encodeValueForCloud,
@@ -86,20 +91,15 @@ export function cloudBundleToApp(
       createdAt: c.created_at,
     }));
 
-  const byId = new Map<string, FlexCategory>();
-  for (const d of DEFAULT_CATEGORY_LIST) byId.set(d.id, d);
-  for (const c of customCats) {
-    if (!byId.has(c.id)) byId.set(c.id, c);
-  }
-  const categories = [...byId.values()];
+  const categories = ensureDefaultCategories(customCats);
+  const byId = new Map(categories.map((c) => [c.id, c]));
 
   const definitions: HabitDefinition[] = cloudHabits.map((h) => {
     const defaultCat = defaultIdFromName(h.category_name);
-    const category =
+    const rawCategory =
       defaultCat ??
-      (h.category_id && byId.has(h.category_id)
-        ? h.category_id
-        : defaultCat ?? "good");
+      (h.category_id && byId.has(h.category_id) ? h.category_id : "good");
+    const category = resolveHabitCategoryId(rawCategory, categories);
     const def: HabitDefinition = {
       id: h.id,
       name: h.name,

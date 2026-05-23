@@ -92,6 +92,23 @@ export function categoryLabel(list: FlexCategory[], id: string): string {
   return c?.name ?? id;
 }
 
+/** Always include built-in Good / Health / Binary / Bad categories. */
+export function ensureDefaultCategories(list: FlexCategory[]): FlexCategory[] {
+  const byId = new Map<string, FlexCategory>();
+  for (const d of DEFAULT_CATEGORY_LIST) byId.set(d.id, d);
+  for (const c of list) byId.set(c.id, c);
+  return sortCategoriesForDisplay([...byId.values()]);
+}
+
+/** Map habit category to a valid category id (defaults to good). */
+export function resolveHabitCategoryId(
+  categoryId: string | undefined,
+  list: FlexCategory[]
+): string {
+  const cats = ensureDefaultCategories(list);
+  return migrateHabitCategoryId(categoryId ?? "good", cats);
+}
+
 /** Map stored habit category string to canonical id. */
 export function migrateHabitCategoryId(raw: string, list: FlexCategory[]): string {
   const t = raw.trim();

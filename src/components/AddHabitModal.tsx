@@ -8,7 +8,9 @@ import { labelClass, modalOverlayLow, selectClass, ui } from "@/lib/uiClasses";
 
 type Props = {
   onClose: () => void;
-  onAdd: (habit: Omit<HabitDefinition, "id">) => void;
+  onAdd: (
+    habit: Omit<HabitDefinition, "id">
+  ) => Promise<{ error: string | null }>;
   categories: FlexCategory[];
   onCreateCategory: (name: string) => string | null;
   onDeleteCategory: (id: string) => void;
@@ -29,6 +31,8 @@ export default function AddHabitModal({
   const [unit, setUnit] = useState("");
   const [newCatName, setNewCatName] = useState("");
   const [showNewCat, setShowNewCat] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
     nameRef.current?.focus();
@@ -51,15 +55,22 @@ export default function AddHabitModal({
     }
   }, [categories, category]);
 
-  const submit = () => {
+  const submit = async () => {
     const trimmed = name.trim();
-    if (!trimmed) return;
-    onAdd({
+    if (!trimmed || busy) return;
+    setSubmitError(null);
+    setBusy(true);
+    const result = await onAdd({
       name: trimmed,
       category,
       type,
       unit: unit.trim() || undefined,
     });
+    setBusy(false);
+    if (result.error) {
+      setSubmitError(result.error);
+      return;
+    }
     onClose();
   };
 
@@ -204,21 +215,28 @@ export default function AddHabitModal({
           </div>
         </div>
 
+        {submitError ? (
+          <p className="mt-4 rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-sm text-red-300/90">
+            {submitError}
+          </p>
+        ) : null}
+
         <div className="mt-6 flex justify-end gap-2">
           <button
             type="button"
             onClick={onClose}
+            disabled={busy}
             className="rounded-lg px-4 py-2 text-sm font-medium text-[var(--foreground)]/70 hover:bg-[var(--foreground)]/8"
           >
             Cancel
           </button>
           <button
             type="button"
-            onClick={submit}
-            disabled={!name.trim()}
+            onClick={() => void submit()}
+            disabled={!name.trim() || busy}
             className="rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm font-medium text-[var(--background)] hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Add habit
+            {busy ? "Saving…" : "Add habit"}
           </button>
         </div>
       </div>

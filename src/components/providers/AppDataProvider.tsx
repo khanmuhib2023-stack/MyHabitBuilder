@@ -12,10 +12,13 @@ import {
 } from "react";
 import { useSyncCode } from "@/components/providers/SyncCodeProvider";
 import {
+  categoryLabel,
   createCustomCategory,
   deleteCustomCategory,
   ensureCategoryForHabits,
+  ensureDefaultCategories,
   loadCategories,
+  resolveHabitCategoryId,
   saveCategories,
   sortCategoriesForDisplay,
   type FlexCategory,
@@ -46,9 +49,6 @@ import {
   type ValuesByDate,
 } from "@/lib/flexHabitStorage";
 import {
-  categoryLabel,
-} from "@/lib/categoryUtils";
-import {
   addHabitComment,
   deleteHabitComment,
   getHabitComments,
@@ -64,6 +64,7 @@ import {
   writeLocalBackup,
 } from "@/lib/syncBridge";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
+import { formatSupabaseError } from "@/lib/supabaseErrors";
 import type { HabitLogSource } from "@/lib/flexHabitTypes";
 
 type AppDataContextValue = {
@@ -89,7 +90,9 @@ type AppDataContextValue = {
     ymd: string,
     source?: HabitLogSource
   ) => void;
-  onAddHabit: (partial: Omit<HabitDefinition, "id">) => Promise<void>;
+  onAddHabit: (
+    partial: Omit<HabitDefinition, "id">
+  ) => Promise<{ error: string | null }>;
   onUpdateHabit: (
     habitId: string,
     patch: Partial<HabitDefinition>
@@ -112,6 +115,21 @@ type AppDataContextValue = {
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
+
+function prepareBundle(bundle: {
+  definitions: HabitDefinition[];
+  values: ValuesByDate;
+  categories: FlexCategory[];
+  comments: HabitComment[];
+}) {
+  let categories = ensureDefaultCategories(bundle.categories);
+  const definitions = bundle.definitions.map((h) => ({
+    ...h,
+    category: resolveHabitCategoryId(h.category, categories),
+  }));
+  categories = ensureCategoryForHabits(categories, definitions);
+  return { ...bundle, categories, definitions };
+}
 
 function loadLocalBundle() {
   const defs = loadDefinitions();
@@ -147,10 +165,11 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       categories: FlexCategory[];
       comments: HabitComment[];
     }) => {
-      setDefinitions(bundle.definitions);
-      setValues(bundle.values);
-      setCategories(bundle.categories);
-      setComments(bundle.comments);
+      const prepared = prepareBundle(bundle);
+      setDefinitions(prepared.definitions);
+      setValues(prepared.values);
+      setCategories(prepared.categories);
+      setComments(prepared.comments);
     },
     []
   );
@@ -176,13 +195,15 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       }
     } catch (e) {
       if (token !== loadToken.current) return;
+      console.error("[loadFromSource]", e);
+      const detail = formatSupabaseError(e);
       const msg =
         e instanceof Error &&
         (e.message.includes("JWT") ||
           e.message.includes("401") ||
           e.message.toLowerCase().includes("not authenticated"))
           ? "Could not load cloud data. Try switching sync code and reconnecting."
-          : "Could not load your data. Try again.";
+          : `Could not load your data: ${detail}`;
       setError(msg);
       if (!syncCode) {
         applyBundle(loadLocalBundle());
@@ -236,8 +257,10 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setError(null);
       try {
         await fn();
-      } catch {
-        setError("Could not save. Try again.");
+      } catch (e) {
+        const msg = formatSupabaseError(e);
+        console.error("[cloud save]", e);
+        setError(`Could not save: ${msg}`);
       } finally {
         setSaving(false);
       }
@@ -279,34 +302,62 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   );
 
   const onAddHabit = useCallback(
-    async (partial: Omit<HabitDefinition, "id">) => {
-      if (isSynced && syncCode) {
-        await withCloudSave(async () => {
-          const created = await saveCloudHabit(
-            habitToCloudInput(partial, syncCode, categories)
-          );
-          const nextHabit: HabitDefinition = {
-            id: created.id,
-            name: created.name,
-            category: partial.category,
-            type: created.habit_type,
-            unit: created.unit ?? undefined,
-            ...(created.target ? { target: created.target } : {}),
-            ...(created.default_value
-              ? { defaultValue: created.default_value }
-              : {}),
-          };
-          setDefinitions((prev) => [...prev, nextHabit]);
+    async (
+      partial: Omit<HabitDefinition, "id">
+    ): Promise<{ error: string | null }> => {
+      const cats = ensureDefaultCategories(categories);
+      const categoryId = resolveHabitCategoryId(partial.category, cats);
+      const normalized: Omit<HabitDefinition, "id"> = {
+        ...partial,
+        name: partial.name.trim(),
+        category: categoryId,
+      };
+
+      if (!isSynced || !syncCode) {
+        setDefinitions((prev) => {
+          const next = appendDefinition(prev, normalized);
+          saveDefinitions(next);
+          return next;
         });
-        return;
+        return { error: null };
       }
-      setDefinitions((prev) => {
-        const next = appendDefinition(prev, partial);
-        saveDefinitions(next);
-        return next;
-      });
+
+      const tempId = `pending_${Date.now()}`;
+      const optimistic: HabitDefinition = { id: tempId, ...normalized };
+      setDefinitions((prev) => [...prev, optimistic]);
+      setError(null);
+
+      try {
+        setSaving(true);
+        const created = await saveCloudHabit(
+          habitToCloudInput(normalized, syncCode, cats)
+        );
+        const saved: HabitDefinition = {
+          id: created.id,
+          name: created.name,
+          category: categoryId,
+          type: created.habit_type,
+          unit: created.unit ?? undefined,
+          ...(created.target ? { target: created.target } : {}),
+          ...(created.default_value
+            ? { defaultValue: created.default_value }
+            : {}),
+        };
+        setDefinitions((prev) =>
+          prev.map((h) => (h.id === tempId ? saved : h))
+        );
+        return { error: null };
+      } catch (e) {
+        const msg = formatSupabaseError(e);
+        console.error("[onAddHabit]", e);
+        setDefinitions((prev) => prev.filter((h) => h.id !== tempId));
+        setError(`Could not add habit: ${msg}`);
+        return { error: msg };
+      } finally {
+        setSaving(false);
+      }
     },
-    [isSynced, syncCode, categories, withCloudSave]
+    [isSynced, syncCode, categories]
   );
 
   const onUpdateHabit = useCallback(
