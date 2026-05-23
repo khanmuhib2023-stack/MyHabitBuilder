@@ -14,7 +14,6 @@ import {
   authErrorFromQuery,
   clearAuthQueryParams,
   exchangeAuthCodeFromUrl,
-  getAuthRedirectUrl,
   normalizeAuthEmail,
 } from "@/lib/authUtils";
 import {
@@ -30,7 +29,7 @@ import {
 
 export type AuthResult = {
   error: string | null;
-  needsEmailConfirmation?: boolean;
+  loggedIn?: boolean;
 };
 
 type AuthContextValue = {
@@ -45,6 +44,15 @@ type AuthContextValue = {
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+function applySession(
+  session: Session | null,
+  setSession: (s: Session | null) => void,
+  setUser: (u: User | null) => void
+) {
+  setSession(session);
+  setUser(session?.user ?? null);
+}
 
 async function bootstrapAuthSession(): Promise<{
   session: Session | null;
@@ -86,8 +94,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     void bootstrapAuthSession().then(({ session: s, initError }) => {
       if (!mounted) return;
-      setSession(s);
-      setUser(s?.user ?? null);
+      applySession(s, setSession, setUser);
       setLoading(false);
       if (initError && typeof window !== "undefined") {
         console.warn("[auth]", initError);
@@ -100,13 +107,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
 
     const { data: sub } = sb.auth.onAuthStateChange((event, nextSession) => {
-      setSession(nextSession);
-      setUser(nextSession?.user ?? null);
+      applySession(nextSession, setSession, setUser);
       setLoading(false);
-
       if (event === "SIGNED_OUT") {
-        setSession(null);
-        setUser(null);
+        applySession(null, setSession, setUser);
       }
     });
 
@@ -133,17 +137,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { error: mapAuthError(error) };
       }
 
-      if (data.user && !data.user.email_confirmed_at) {
-        await sb.auth.signOut();
-        return {
-          error: AUTH_MESSAGES.emailNotConfirmed,
-          needsEmailConfirmation: true,
-        };
-      }
-
-      setSession(data.session);
-      setUser(data.user);
-      return { error: null };
+      applySession(data.session, setSession, setUser);
+      return { error: null, loggedIn: true };
     },
     []
   );
@@ -159,9 +154,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const { data, error } = await sb.auth.signUp({
         email: normalizedEmail,
         password,
-        options: {
-          emailRedirectTo: getAuthRedirectUrl(),
-        },
       });
 
       if (error) {
@@ -173,23 +165,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       if (data.session) {
-        setSession(data.session);
-        setUser(data.user);
-        return { error: null };
+        applySession(data.session, setSession, setUser);
+        return { error: null, loggedIn: true };
       }
 
-      return {
-        error: null,
-        needsEmailConfirmation: true,
-      };
+      // Email confirmation off: signUp may not return a session — sign in immediately.
+      const signInAttempt = await sb.auth.signInWithPassword({
+        email: normalizedEmail,
+        password,
+      });
+
+      if (signInAttempt.error) {
+        return { error: mapAuthError(signInAttempt.error) };
+      }
+
+      applySession(signInAttempt.data.session, setSession, setUser);
+      return { error: null, loggedIn: true };
     },
     []
   );
 
   const signOut = useCallback(async () => {
+    applySession(null, setSession, setUser);
     const sb = getSupabase();
-    setSession(null);
-    setUser(null);
     if (!sb) return;
     await sb.auth.signOut({ scope: "local" });
   }, []);

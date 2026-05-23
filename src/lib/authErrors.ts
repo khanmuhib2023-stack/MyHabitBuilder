@@ -4,13 +4,10 @@ export const AUTH_MESSAGES = {
   configError: "App configuration error: Supabase is not connected.",
   passwordsMismatch: "Passwords do not match.",
   passwordTooShort: "Password must be at least 6 characters.",
-  signupSuccess:
-    "Account created. Please check your email and confirm your account before logging in.",
+  signupSuccess: "Account created. You are now logged in.",
   accountExists:
-    "An account already exists with this email. Try logging in instead.",
-  invalidCredentials:
-    "Invalid email or password. If you just signed up, confirm your email first.",
-  emailNotConfirmed: "Please confirm your email before logging in.",
+    "An account already exists with this email. Try logging in.",
+  invalidCredentials: "Invalid email or password.",
 } as const;
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -28,10 +25,6 @@ export function mapAuthError(error: AuthError | null): string | null {
 
   const code = error.code ?? "";
   const msg = (error.message ?? "").toLowerCase();
-
-  if (code === "email_not_confirmed" || msg.includes("email not confirmed")) {
-    return AUTH_MESSAGES.emailNotConfirmed;
-  }
 
   if (
     code === "invalid_credentials" ||

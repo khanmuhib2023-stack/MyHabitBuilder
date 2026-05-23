@@ -47,22 +47,15 @@ export default function AuthForm({ initialMode = "login" }: { initialMode?: Mode
       return;
     }
 
-    if (mode === "signup") {
-      const lengthErr = validatePasswordLength(password);
-      if (lengthErr) {
-        setMessage(lengthErr);
-        return;
-      }
-      if (password !== confirmPassword) {
-        setMessage(AUTH_MESSAGES.passwordsMismatch);
-        return;
-      }
-    } else {
-      const lengthErr = validatePasswordLength(password);
-      if (lengthErr) {
-        setMessage(lengthErr);
-        return;
-      }
+    const lengthErr = validatePasswordLength(password);
+    if (lengthErr) {
+      setMessage(lengthErr);
+      return;
+    }
+
+    if (mode === "signup" && password !== confirmPassword) {
+      setMessage(AUTH_MESSAGES.passwordsMismatch);
+      return;
     }
 
     setBusy(true);
@@ -77,13 +70,15 @@ export default function AuthForm({ initialMode = "login" }: { initialMode?: Mode
       return;
     }
 
-    if (mode === "signup") {
+    if (result.loggedIn) {
       setIsSuccess(true);
-      setMessage(AUTH_MESSAGES.signupSuccess);
+      setMessage(
+        mode === "signup"
+          ? AUTH_MESSAGES.signupSuccess
+          : "Logged in successfully."
+      );
       setPassword("");
       setConfirmPassword("");
-      setMode("login");
-      return;
     }
   };
 

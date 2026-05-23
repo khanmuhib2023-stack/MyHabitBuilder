@@ -165,7 +165,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         const bundle = await fetchCloudBundle(userId);
         if (token !== loadToken.current) return;
         applyBundle(bundle);
-        writeLocalBackup(bundle);
       } else {
         if (typeof window !== "undefined") {
           if (localStorage.getItem(FLEX_HABIT_DEFINITIONS_KEY) == null) {
@@ -186,8 +185,9 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           ? "Could not load cloud data. Try logging out and back in."
           : "Could not load your data. Try again.";
       setError(msg);
-      const bundle = loadLocalBundle();
-      applyBundle(bundle);
+      if (!userId) {
+        applyBundle(loadLocalBundle());
+      }
     } finally {
       if (token === loadToken.current) setDataLoading(false);
     }
@@ -208,21 +208,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const persistDefinitions = useCallback(
     (next: HabitDefinition[]) => {
       setDefinitions(next);
-      saveDefinitions(next);
+      if (!isSynced) saveDefinitions(next);
     },
-    []
+    [isSynced]
   );
 
-  const persistValues = useCallback((next: ValuesByDate) => {
-    setValues(next);
-    saveValues(next);
-  }, []);
+  const persistValues = useCallback(
+    (next: ValuesByDate) => {
+      setValues(next);
+      if (!isSynced) saveValues(next);
+    },
+    [isSynced]
+  );
 
-  const persistCategories = useCallback((next: FlexCategory[]) => {
-    const sorted = sortCategoriesForDisplay(next);
-    setCategories(sorted);
-    saveCategories(sorted);
-  }, []);
+  const persistCategories = useCallback(
+    (next: FlexCategory[]) => {
+      const sorted = sortCategoriesForDisplay(next);
+      setCategories(sorted);
+      if (!isSynced) saveCategories(sorted);
+    },
+    [isSynced]
+  );
 
   const withCloudSave = useCallback(
     async (fn: () => Promise<void>) => {
@@ -249,7 +255,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     ) => {
       setValues((prev) => {
         const next = setValueForHabit(prev, ymd, habit, val, source);
-        saveValues(next);
+        if (!isSynced) saveValues(next);
         if (isSynced && userId) {
           const enc = next[ymd]?.[habit.id];
           if (enc) {
@@ -291,11 +297,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
               ? { defaultValue: created.default_value }
               : {}),
           };
-          setDefinitions((prev) => {
-            const next = [...prev, nextHabit];
-            saveDefinitions(next);
-            return next;
-          });
+          setDefinitions((prev) => [...prev, nextHabit]);
         });
         return;
       }
@@ -312,7 +314,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (habitId: string, patch: Partial<HabitDefinition>) => {
       setDefinitions((prev) => {
         const next = updateHabitDefinition(prev, habitId, patch);
-        saveDefinitions(next);
+        if (!isSynced) saveDefinitions(next);
         if (isSynced && userId) {
           const updated = next.find((h) => h.id === habitId);
           if (updated) {
@@ -334,7 +336,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     async (habitId: string) => {
       setDefinitions((prev) => {
         const next = prev.filter((h) => h.id !== habitId);
-        saveDefinitions(next);
+        if (!isSynced) saveDefinitions(next);
         return next;
       });
       if (isSynced && userId) {
@@ -359,20 +361,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             name: c.name,
             is_default: false,
           });
-          setCategories((prev) => {
-            const mapped = prev.map((cat) =>
-              cat.id === c.id ? { ...cat, id: row.id } : cat
-            );
-            saveCategories(mapped);
-            return mapped;
-          });
-          setDefinitions((prev) => {
-            const updated = prev.map((h) =>
+          setCategories((prev) =>
+            prev.map((cat) => (cat.id === c.id ? { ...cat, id: row.id } : cat))
+          );
+          setDefinitions((prev) =>
+            prev.map((h) =>
               h.category === c.id ? { ...h, category: row.id } : h
-            );
-            saveDefinitions(updated);
-            return updated;
-          });
+            )
+          );
         });
       }
       return c.id;
@@ -430,9 +426,6 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
         id: newCommentId(),
         createdAt: new Date().toISOString(),
       };
-      const next = [...comments, comment];
-      setComments(next);
-      saveHabitComments(next);
       if (isSynced && userId) {
         await withCloudSave(async () => {
           const row = await addCloudComment({
@@ -443,11 +436,17 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             text: input.text,
             sentiment: input.sentiment,
           });
-          setComments((prev) =>
-            prev.map((c) => (c.id === comment.id ? { ...c, id: row.id } : c))
-          );
+          const saved: HabitComment = {
+            ...comment,
+            id: row.id,
+          };
+          setComments((prev) => [...prev, saved]);
         });
+        return;
       }
+      const next = [...comments, comment];
+      setComments(next);
+      saveHabitComments(next);
     },
     [comments, isSynced, userId, withCloudSave]
   );
@@ -457,11 +456,20 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       commentId: string,
       patch: Pick<HabitComment, "text" | "sentiment">
     ) => {
-      const updated = updateHabitComment(commentId, patch);
-      if (updated) {
-        setComments(getHabitComments());
-      }
-      if (isSynced && userId && updated) {
+      if (isSynced && userId) {
+        const existing = comments.find((c) => c.id === commentId);
+        if (!existing) return null;
+        const trimmed = patch.text.trim();
+        if (!trimmed) return null;
+        const updated: HabitComment = {
+          ...existing,
+          text: trimmed,
+          sentiment: patch.sentiment,
+          updatedAt: new Date().toISOString(),
+        };
+        setComments((prev) =>
+          prev.map((c) => (c.id === commentId ? updated : c))
+        );
         await withCloudSave(async () => {
           await updateCloudComment({
             id: commentId,
@@ -473,21 +481,26 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             sentiment: updated.sentiment,
           });
         });
+        return updated;
       }
+      const updated = updateHabitComment(commentId, patch);
+      if (updated) setComments(getHabitComments());
       return updated;
     },
-    [isSynced, userId, withCloudSave]
+    [comments, isSynced, userId, withCloudSave]
   );
 
   const removeComment = useCallback(
     async (commentId: string) => {
-      deleteHabitComment(commentId);
-      setComments(getHabitComments());
       if (isSynced && userId) {
+        setComments((prev) => prev.filter((c) => c.id !== commentId));
         await withCloudSave(async () => {
           await deleteCloudComment(commentId);
         });
+        return;
       }
+      deleteHabitComment(commentId);
+      setComments(getHabitComments());
     },
     [isSynced, userId, withCloudSave]
   );
