@@ -1,4 +1,9 @@
-import type { HabitDefaultValue, HabitTarget, HabitType } from "@/lib/flexHabitTypes";
+import type {
+  HabitDefaultValue,
+  HabitScoringKey,
+  HabitTarget,
+  HabitType,
+} from "@/lib/flexHabitTypes";
 import { getSupabase } from "@/lib/supabaseClient";
 
 export type CloudCategory = {
@@ -19,6 +24,8 @@ export type CloudHabit = {
   unit: string | null;
   target: HabitTarget | null;
   default_value: HabitDefaultValue | null;
+  scoring_key: HabitScoringKey | null;
+  meta: Record<string, unknown> | null;
   created_at: string;
   updated_at: string;
 };
@@ -38,6 +45,8 @@ export type CloudLog = {
   log_date: string;
   timestamp: string;
   created_at: string;
+  score: number | null;
+  payload: Record<string, unknown> | null;
 };
 
 export type CloudComment = {
@@ -62,6 +71,8 @@ export type CloudHabitInput = {
   unit?: string | null;
   target?: HabitTarget | null;
   default_value?: HabitDefaultValue | null;
+  scoring_key?: HabitScoringKey | null;
+  meta?: Record<string, unknown> | null;
 };
 
 export type CloudLogInput = {
@@ -76,6 +87,8 @@ export type CloudLogInput = {
   source?: string | null;
   log_date: string;
   timestamp: string;
+  score?: number | null;
+  payload?: Record<string, unknown> | null;
 };
 
 export type CloudCategoryInput = {
@@ -124,6 +137,8 @@ export async function saveCloudHabit(
     unit: habit.unit ?? null,
     target: habit.target ?? null,
     default_value: habit.default_value ?? null,
+    scoring_key: habit.scoring_key ?? null,
+    meta: habit.meta ?? null,
     updated_at: new Date().toISOString(),
   };
   const { data, error } = await supabaseOrThrow()
@@ -148,6 +163,8 @@ export async function updateCloudHabit(
       unit: habit.unit ?? null,
       target: habit.target ?? null,
       default_value: habit.default_value ?? null,
+      scoring_key: habit.scoring_key ?? null,
+      meta: habit.meta ?? null,
       updated_at: new Date().toISOString(),
     })
     .eq("id", habit.id)
@@ -193,6 +210,8 @@ export async function upsertCloudLog(log: CloudLogInput): Promise<CloudLog> {
     source: log.source ?? "manual",
     log_date: log.log_date,
     timestamp: log.timestamp,
+    score: log.score ?? null,
+    payload: log.payload ?? null,
   };
   const { data, error } = await supabaseOrThrow()
     .from("habit_logs")

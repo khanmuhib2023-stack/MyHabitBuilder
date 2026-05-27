@@ -1,3 +1,12 @@
+/** PostgREST: table not in schema cache (tables never created or wrong project). */
+export function isSchemaMissingError(error: unknown): boolean {
+  if (error == null || typeof error !== "object") return false;
+  const e = error as Record<string, unknown>;
+  if (e.code === "PGRST205") return true;
+  const msg = String(e.message ?? "").toLowerCase();
+  return msg.includes("schema cache") || msg.includes("could not find the table");
+}
+
 /** User-facing message from Supabase/PostgREST errors. */
 export function formatSupabaseError(error: unknown): string {
   if (error == null) return "Unknown error";

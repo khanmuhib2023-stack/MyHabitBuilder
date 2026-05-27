@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { HabitDefinition, HabitType } from "@/lib/flexHabitTypes";
+import type { HabitDefinition, HabitScoringKey, HabitType } from "@/lib/flexHabitTypes";
 import { TYPE_LABELS } from "@/lib/flexHabitTypes";
 import type { FlexCategory } from "@/lib/categoryUtils";
 import { labelClass, modalOverlayLow, selectClass, ui } from "@/lib/uiClasses";
@@ -26,8 +26,11 @@ export default function AddHabitModal({
   const titleId = useId();
   const nameRef = useRef<HTMLInputElement>(null);
   const [name, setName] = useState("");
-  const [category, setCategory] = useState(categories[0]?.id ?? "good");
+  const [category, setCategory] = useState(categories[0]?.id ?? "study");
   const [type, setType] = useState<HabitType>("number");
+  const [scoringKey, setScoringKey] = useState<HabitDefinition["scoringKey"]>(
+    "generic"
+  );
   const [unit, setUnit] = useState("");
   const [newCatName, setNewCatName] = useState("");
   const [showNewCat, setShowNewCat] = useState(false);
@@ -49,11 +52,20 @@ export default function AddHabitModal({
   useEffect(() => {
     if (!categories.some((c) => c.id === category)) {
       const tid = window.setTimeout(() => {
-        setCategory(categories[0]?.id ?? "good");
+        setCategory(categories[0]?.id ?? "study");
       }, 0);
       return () => window.clearTimeout(tid);
     }
   }, [categories, category]);
+
+  useEffect(() => {
+    if (type === "duration" && category === "study") setScoringKey("study_duration");
+    else if (type === "gym") setScoringKey("gym");
+    else if (type === "five_k") setScoringKey("five_k");
+    else if (type === "sleep_late") setScoringKey("sleep_late");
+    else if (type === "checkbox") setScoringKey("generic");
+    else setScoringKey("generic");
+  }, [type, category]);
 
   const submit = async () => {
     const trimmed = name.trim();
@@ -65,6 +77,8 @@ export default function AddHabitModal({
       category,
       type,
       unit: unit.trim() || undefined,
+      scoringKey:
+        scoringKey && scoringKey !== "generic" ? scoringKey : undefined,
     });
     setBusy(false);
     if (result.error) {
@@ -201,6 +215,33 @@ export default function AddHabitModal({
             </select>
           </div>
           <div>
+            <label htmlFor="habit-scoring" className={labelClass}>
+              Scoring
+            </label>
+            <select
+              id="habit-scoring"
+              value={scoringKey ?? "generic"}
+              onChange={(e) =>
+                setScoringKey(e.target.value as HabitScoringKey)
+              }
+              className={selectClass}
+            >
+              <option value="generic">Generic</option>
+              <option value="study_duration">Study time</option>
+              <option value="steps">Steps</option>
+              <option value="morning_routine">Morning routine</option>
+              <option value="gym">Gym</option>
+              <option value="five_k">5K</option>
+              <option value="sleep_late">Sleep (late)</option>
+              <option value="calories">Calories</option>
+              <option value="protein">Protein</option>
+              <option value="creatine">Creatine</option>
+              <option value="rule1">Rule #1 (bad)</option>
+              <option value="quran">Quran study</option>
+              <option value="rakats">Prayer rakats</option>
+            </select>
+          </div>
+          <div>
             <label htmlFor="habit-unit" className={labelClass}>
               Unit <span className="font-normal">(optional)</span>
             </label>
@@ -209,7 +250,13 @@ export default function AddHabitModal({
               value={unit}
               onChange={(e) => setUnit(e.target.value)}
               placeholder="e.g. kg, kcal, reps"
-              disabled={type === "checkbox" || type === "duration"}
+              disabled={
+                type === "checkbox" ||
+                type === "duration" ||
+                type === "gym" ||
+                type === "five_k" ||
+                type === "sleep_late"
+              }
               className={`${selectClass} disabled:cursor-not-allowed disabled:opacity-45`}
             />
           </div>

@@ -159,5 +159,87 @@ grant select, insert, update, delete on table public.habits to anon, authenticat
 grant select, insert, update, delete on table public.habit_logs to anon, authenticated, service_role;
 grant select, insert, update, delete on table public.habit_comments to anon, authenticated, service_role;
 
+-- Callable from the app if tables are missing (after this script has been run once)
+create or replace function public.ensure_habit_processor_tables()
+returns text
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  create table if not exists public.categories (
+    id uuid primary key default gen_random_uuid(),
+    sync_code text not null,
+    name text not null,
+    is_default boolean not null default false,
+    created_at timestamptz not null default now()
+  );
+
+  create table if not exists public.habits (
+    id uuid primary key default gen_random_uuid(),
+    sync_code text not null,
+    name text not null,
+    category_id uuid references public.categories (id) on delete set null,
+    category_name text,
+    habit_type text not null,
+    unit text,
+    target jsonb,
+    default_value jsonb,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now()
+  );
+
+  create table if not exists public.habit_logs (
+    id uuid primary key default gen_random_uuid(),
+    sync_code text not null,
+    habit_id uuid references public.habits (id) on delete set null,
+    habit_name text not null,
+    category_name text,
+    log_type text,
+    value numeric,
+    count numeric,
+    unit text,
+    comment text,
+    source text,
+    log_date text not null,
+    timestamp timestamptz not null,
+    created_at timestamptz not null default now(),
+    constraint habit_logs_sync_code_habit_id_log_date_key unique (sync_code, habit_id, log_date)
+  );
+
+  create table if not exists public.habit_comments (
+    id uuid primary key default gen_random_uuid(),
+    sync_code text not null,
+    habit_id uuid references public.habits (id) on delete set null,
+    habit_name text not null,
+    category_name text,
+    text text not null,
+    sentiment text not null default 'neutral',
+    created_at timestamptz not null default now(),
+    updated_at timestamptz
+  );
+
+  alter table public.categories enable row level security;
+  alter table public.habits enable row level security;
+  alter table public.habit_logs enable row level security;
+  alter table public.habit_comments enable row level security;
+
+  perform pg_notify('pgrst', 'reload schema');
+  return 'ok';
+end;
+$$;
+
+grant execute on function public.ensure_habit_processor_tables() to anon, authenticated;
+
 -- Reload PostgREST schema cache (fixes PGRST205 after creating tables)
+notify pgrst, 'reload schema';
+
+-- ---------------------------------------------------------------------------
+-- Migration (run on existing projects) — scoring + structured habit logs
+-- ---------------------------------------------------------------------------
+alter table public.habits add column if not exists scoring_key text;
+alter table public.habits add column if not exists meta jsonb;
+alter table public.habit_logs add column if not exists score numeric;
+alter table public.habit_logs add column if not exists payload jsonb;
+
 notify pgrst, 'reload schema';

@@ -98,7 +98,7 @@ export function cloudBundleToApp(
     const defaultCat = defaultIdFromName(h.category_name);
     const rawCategory =
       defaultCat ??
-      (h.category_id && byId.has(h.category_id) ? h.category_id : "good");
+      (h.category_id && byId.has(h.category_id) ? h.category_id : "study");
     const category = resolveHabitCategoryId(rawCategory, categories);
     const def: HabitDefinition = {
       id: h.id,
@@ -109,6 +109,8 @@ export function cloudBundleToApp(
     };
     if (h.target) def.target = h.target;
     if (h.default_value) def.defaultValue = h.default_value;
+    if (h.scoring_key) def.scoringKey = h.scoring_key;
+    if (h.meta) def.meta = h.meta;
     return def;
   });
 

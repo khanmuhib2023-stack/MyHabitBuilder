@@ -7,7 +7,9 @@ import type {
   GraphTab,
   MonthlySeriesPoint,
 } from "@/lib/graphUtils";
+import GraphSummaryStats from "@/components/graphs/GraphSummaryStats";
 import HabitTrendChart from "@/components/graphs/HabitTrendChart";
+import type { SummaryRow } from "@/lib/graphUtils";
 import { useSwipeNavigation } from "@/hooks/useSwipeNavigation";
 import { ui } from "@/lib/uiClasses";
 
@@ -24,6 +26,7 @@ type Props = {
   unit?: string;
   points: Point[];
   compactY?: boolean;
+  summaryRows?: SummaryRow[];
   onTimeNavigatePrev?: () => void;
   onTimeNavigateNext?: () => void;
   canTimeNavigateNext?: boolean;
@@ -40,6 +43,7 @@ export default function ExpandedGraphModal({
   unit,
   points,
   compactY,
+  summaryRows,
   onTimeNavigatePrev,
   onTimeNavigateNext,
   canTimeNavigateNext = true,
@@ -100,6 +104,11 @@ export default function ExpandedGraphModal({
             </button>
           </header>
           <div className="relative flex min-h-0 flex-1 flex-col p-3 sm:p-5">
+            {summaryRows && summaryRows.length > 0 ? (
+              <div className="mb-3 shrink-0">
+                <GraphSummaryStats rows={summaryRows} />
+              </div>
+            ) : null}
             <div
               className="pointer-events-none absolute inset-3 rounded-2xl opacity-60 sm:inset-5"
               style={{

@@ -5,6 +5,7 @@ import type { HabitDefinition, HabitValue } from "@/lib/flexHabitTypes";
 import type { ValuesByDate } from "@/lib/flexHabitStorage";
 import { getValueForHabit } from "@/lib/flexHabitStorage";
 import { formatDefaultText } from "@/lib/defaultValueUtils";
+import { computeDailyScore } from "@/lib/scoringEngine";
 import {
   calculateHabitStreak,
   formatTargetText,
@@ -135,13 +136,17 @@ export default function HabitCategorySection({
                 );
                 const streakTx = streakLabel(habit, streak);
                 const statusTx = todayStatusLine(habit, values, todayYmd);
+                const val = getValueForHabit(values, todayYmd, habit);
+                const score = computeDailyScore(habit, val);
+                const scoreText =
+                  score != null && Number.isFinite(score)
+                    ? `${score >= 0 ? "+" : ""}${Math.round(score * 10) / 10} pts`
+                    : null;
                 return (
                   <HabitRow
                     key={habit.id}
                     habit={habit}
-                    value={getValueForHabit(values, todayYmd, habit)}
-                    values={values}
-                    todayYmd={todayYmd}
+                    value={val}
                     onChange={(v) => onValueChange(habit, v)}
                     onUseDefault={() => onUseDefault(habit)}
                     editMode={editMode}
@@ -153,6 +158,7 @@ export default function HabitCategorySection({
                     statusText={statusTx}
                     goalLabel={formatTargetText(habit)}
                     defaultLabel={formatDefaultText(habit)}
+                    scoreText={scoreText}
                     latestCommentPreview={
                       latestCommentByHabit[habit.id] ?? null
                     }

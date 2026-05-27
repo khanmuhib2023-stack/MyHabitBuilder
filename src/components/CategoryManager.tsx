@@ -223,7 +223,7 @@ export default function CategoryManager() {
 
           onConfirmMove={(toId) => void finishRemove(pendingCat.id, toId)}
 
-          onConfirmMoveToGood={() => void finishRemove(pendingCat.id, "good")}
+          onConfirmMoveToStudy={() => void finishRemove(pendingCat.id, "study")}
 
         />
 

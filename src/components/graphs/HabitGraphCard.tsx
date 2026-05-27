@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { HabitDefinition } from "@/lib/flexHabitTypes";
 import { hasAnyStoredLogForHabit, type ValuesByDate } from "@/lib/flexHabitStorage";
 import {
@@ -15,7 +15,8 @@ import {
   getMonthsForYear,
   type GraphTab,
 } from "@/lib/graphUtils";
-import GraphSummaryStats from "@/components/graphs/GraphSummaryStats";
+import { computeDailyScore } from "@/lib/scoringEngine";
+import { getValueForHabit } from "@/lib/flexHabitStorage";
 import Last7DaysGraph from "@/components/graphs/Last7DaysGraph";
 import MonthlyGraph from "@/components/graphs/MonthlyGraph";
 import ExpandedGraphModal from "@/components/graphs/ExpandedGraphModal";
@@ -50,6 +51,14 @@ export default function HabitGraphCard({
   canTimeNavigateNext = true,
 }: Props) {
   const [expanded, setExpanded] = useState(false);
+  const lastTapRef = useRef(0);
+
+  const openExpanded = () => setExpanded(true);
+  const handleCardActivate = () => {
+    const now = Date.now();
+    if (now - lastTapRef.current < 350) openExpanded();
+    lastTapRef.current = now;
+  };
 
   const last7 = useMemo(
     () => getLast7Days(windowEndDate),
@@ -68,10 +77,22 @@ export default function HabitGraphCard({
   );
 
   const summary = useMemo(() => {
-    return tab === "last7"
-      ? buildLast7Summary(habit, values, windowEndDate)
-      : buildMonthlySummary(habit, values, chartYear);
-  }, [habit, values, windowEndDate, tab, chartYear]);
+    const base =
+      tab === "last7"
+        ? buildLast7Summary(habit, values, windowEndDate)
+        : buildMonthlySummary(habit, values, chartYear);
+    const endY = last7[last7.length - 1]?.ymd;
+    if (!endY) return base;
+    const sc = computeDailyScore(habit, getValueForHabit(values, endY, habit));
+    if (sc == null || !Number.isFinite(sc)) return base;
+    return [
+      {
+        label: "Today's score",
+        value: `${sc >= 0 ? "+" : ""}${Math.round(sc * 10) / 10}`,
+      },
+      ...base,
+    ];
+  }, [habit, values, windowEndDate, tab, chartYear, last7]);
 
   const hasEver = useMemo(
     () => hasAnyStoredLogForHabit(values, habit.id),
@@ -122,27 +143,19 @@ export default function HabitGraphCard({
     <>
       <article
         className={`${ui.card} p-4 sm:p-5 transition-opacity duration-200`}
-        onDoubleClick={() => setExpanded(true)}
+        onDoubleClick={openExpanded}
         role="presentation"
         {...swipeHandlers}
         style={{ touchAction: "pan-y" }}
       >
-        <header className="mb-3 flex flex-wrap items-baseline justify-between gap-2">
+        <header
+          className="mb-2 flex flex-wrap items-baseline justify-between gap-2"
+          onTouchEnd={handleCardActivate}
+        >
           <h2 className="text-base font-semibold tracking-tight text-[var(--foreground)]">
             {habit.name}
           </h2>
-          <span className="rounded-full border border-[var(--foreground)]/12 bg-[var(--foreground)]/[0.05] px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--foreground)]/50">
-            {catLabel}
-          </span>
         </header>
-
-        <p className="mb-1 text-xs text-[var(--foreground)]/45">{chartSubtitle}</p>
-
-        <p className="mb-2 text-[10px] text-[var(--foreground)]/40">
-          Double-click chart to expand · swipe to change period
-        </p>
-
-        <GraphSummaryStats rows={summary} />
 
         {tab === "last7" ? (
           <Last7DaysGraph
@@ -173,6 +186,7 @@ export default function HabitGraphCard({
         unit={habit.unit}
         points={points}
         compactY={compactY}
+        summaryRows={summary}
         onTimeNavigatePrev={onTimeNavigatePrev}
         onTimeNavigateNext={onTimeNavigateNext}
         canTimeNavigateNext={canTimeNavigateNext}

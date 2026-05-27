@@ -14,6 +14,7 @@ import { useSyncCode } from "@/components/providers/SyncCodeProvider";
 import {
   categoryLabel,
   createCustomCategory,
+  DEFAULT_CATEGORY_LIST,
   deleteCustomCategory,
   ensureCategoryForHabits,
   ensureDefaultCategories,
@@ -64,7 +65,17 @@ import {
   writeLocalBackup,
 } from "@/lib/syncBridge";
 import { isSupabaseConfigured } from "@/lib/supabaseClient";
-import { formatSupabaseError } from "@/lib/supabaseErrors";
+import { formatSupabaseError, isSchemaMissingError } from "@/lib/supabaseErrors";
+import {
+  attemptEnsureTables,
+  probeHabitsTable,
+  schemaSetupInstructions,
+} from "@/lib/supabaseSetup";
+import {
+  loadSyncCodeBundle,
+  mergeSyncCodeBundle,
+  saveSyncCodeBundle,
+} from "@/lib/syncCodeBundleStorage";
 import type { HabitLogSource } from "@/lib/flexHabitTypes";
 
 type AppDataContextValue = {
@@ -72,6 +83,7 @@ type AppDataContextValue = {
   dataLoading: boolean;
   saving: boolean;
   error: string | null;
+  setupWarning: string | null;
   isSynced: boolean;
   definitions: HabitDefinition[];
   values: ValuesByDate;
@@ -112,6 +124,7 @@ type AppDataContextValue = {
   uploadLocalToCloud: () => Promise<string>;
   downloadCloudToDevice: () => Promise<string>;
   clearError: () => void;
+  clearSetupWarning: () => void;
 };
 
 const AppDataContext = createContext<AppDataContextValue | null>(null);
@@ -152,11 +165,22 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
   const [dataLoading, setDataLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [setupWarning, setSetupWarning] = useState<string | null>(null);
   const [definitions, setDefinitions] = useState<HabitDefinition[]>([]);
   const [values, setValues] = useState<ValuesByDate>({});
   const [categories, setCategories] = useState<FlexCategory[]>([]);
   const [comments, setComments] = useState<HabitComment[]>([]);
   const loadToken = useRef(0);
+  const dataRef = useRef({
+    definitions: [] as HabitDefinition[],
+    values: {} as ValuesByDate,
+    categories: [] as FlexCategory[],
+    comments: [] as HabitComment[],
+  });
+
+  useEffect(() => {
+    dataRef.current = { definitions, values, categories, comments };
+  }, [definitions, values, categories, comments]);
 
   const applyBundle = useCallback(
     (bundle: {
@@ -180,9 +204,35 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
     setError(null);
     try {
       if (syncCode && isSupabaseConfigured()) {
+        let probe = await probeHabitsTable();
+        if (!probe.ok && probe.missing) {
+          await attemptEnsureTables();
+          probe = await probeHabitsTable();
+        }
+
+        if (!probe.ok && probe.missing) {
+          const local = loadSyncCodeBundle(syncCode);
+          if (local) {
+            applyBundle(local);
+          } else {
+            applyBundle(
+              prepareBundle({
+                definitions: [],
+                values: {},
+                categories: [...DEFAULT_CATEGORY_LIST],
+                comments: [],
+              })
+            );
+          }
+          setSetupWarning(schemaSetupInstructions());
+          return;
+        }
+
         const bundle = await fetchCloudBundle(syncCode);
         if (token !== loadToken.current) return;
         applyBundle(bundle);
+        saveSyncCodeBundle(syncCode, prepareBundle(bundle));
+        setSetupWarning(null);
       } else {
         if (typeof window !== "undefined") {
           if (localStorage.getItem(FLEX_HABIT_DEFINITIONS_KEY) == null) {
@@ -204,9 +254,27 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
           e.message.toLowerCase().includes("not authenticated"))
           ? "Could not load cloud data. Try switching sync code and reconnecting."
           : `Could not load your data: ${detail}`;
-      setError(msg);
-      if (!syncCode) {
-        applyBundle(loadLocalBundle());
+      if (syncCode && isSchemaMissingError(e)) {
+        const local = loadSyncCodeBundle(syncCode);
+        if (local) {
+          applyBundle(local);
+        } else {
+          applyBundle(
+            prepareBundle({
+              definitions: [],
+              values: {},
+              categories: [...DEFAULT_CATEGORY_LIST],
+              comments: [],
+            })
+          );
+        }
+        setSetupWarning(schemaSetupInstructions());
+        setError(null);
+      } else {
+        setError(msg);
+        if (!syncCode) {
+          applyBundle(loadLocalBundle());
+        }
       }
     } finally {
       if (token === loadToken.current) setDataLoading(false);
@@ -327,11 +395,37 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       setDefinitions((prev) => [...prev, optimistic]);
       setError(null);
 
+      const saveLocalHabit = (saved: HabitDefinition) => {
+        setDefinitions((prev) => {
+          const defs = prev.map((h) => (h.id === tempId ? saved : h));
+          const snap = dataRef.current;
+          mergeSyncCodeBundle(syncCode, {
+            definitions: defs,
+            values: snap.values,
+            categories: snap.categories,
+            comments: snap.comments,
+          });
+          return defs;
+        });
+        setSetupWarning(schemaSetupInstructions());
+      };
+
       try {
         setSaving(true);
-        const created = await saveCloudHabit(
-          habitToCloudInput(normalized, syncCode, cats)
-        );
+        let created;
+        try {
+          created = await saveCloudHabit(
+            habitToCloudInput(normalized, syncCode, cats)
+          );
+        } catch (firstErr) {
+          if (!isSchemaMissingError(firstErr)) throw firstErr;
+          const ensured = await attemptEnsureTables();
+          if (!ensured) throw firstErr;
+          created = await saveCloudHabit(
+            habitToCloudInput(normalized, syncCode, cats)
+          );
+        }
+
         const saved: HabitDefinition = {
           id: created.id,
           name: created.name,
@@ -343,13 +437,30 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
             ? { defaultValue: created.default_value }
             : {}),
         };
-        setDefinitions((prev) =>
-          prev.map((h) => (h.id === tempId ? saved : h))
-        );
+        setDefinitions((prev) => {
+          const defs = prev.map((h) => (h.id === tempId ? saved : h));
+          const snap = dataRef.current;
+          saveSyncCodeBundle(syncCode, {
+            definitions: defs,
+            values: snap.values,
+            categories: snap.categories,
+            comments: snap.comments,
+          });
+          return defs;
+        });
+        setSetupWarning(null);
         return { error: null };
       } catch (e) {
-        const msg = formatSupabaseError(e);
         console.error("[onAddHabit]", e);
+        if (isSchemaMissingError(e)) {
+          const localId =
+            typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `local_${Date.now()}`;
+          saveLocalHabit({ id: localId, ...normalized });
+          return { error: null };
+        }
+        const msg = formatSupabaseError(e);
         setDefinitions((prev) => prev.filter((h) => h.id !== tempId));
         setError(`Could not add habit: ${msg}`);
         return { error: msg };
@@ -593,6 +704,7 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       dataLoading,
       saving,
       error,
+      setupWarning,
       isSynced,
       definitions,
       values,
@@ -617,12 +729,14 @@ export function AppDataProvider({ children }: { children: ReactNode }) {
       uploadLocalToCloud: uploadLocal,
       downloadCloudToDevice: downloadCloud,
       clearError: () => setError(null),
+      clearSetupWarning: () => setSetupWarning(null),
     }),
     [
       hydrated,
       dataLoading,
       saving,
       error,
+      setupWarning,
       isSynced,
       definitions,
       values,

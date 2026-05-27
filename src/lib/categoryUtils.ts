@@ -1,4 +1,9 @@
 import type { HabitDefinition } from "@/lib/flexHabitTypes";
+import {
+  CATEGORY_LABELS,
+  DEFAULT_CATEGORY_IDS,
+  type DefaultCategoryId,
+} from "@/lib/flexHabitTypes";
 
 export const FLEX_CATEGORIES_KEY = "flexHabitCategories";
 
@@ -10,19 +15,21 @@ export type FlexCategory = {
 };
 
 export const DEFAULT_CATEGORY_LIST: FlexCategory[] = [
-  { id: "good", name: "Good Habits", isDefault: true, createdAt: "0" },
+  { id: "study", name: "Study", isDefault: true, createdAt: "0" },
   { id: "health", name: "Health", isDefault: true, createdAt: "0" },
-  { id: "binary", name: "Binary", isDefault: true, createdAt: "0" },
-  { id: "bad", name: "Bad Habits", isDefault: true, createdAt: "0" },
+  { id: "islam", name: "Islam", isDefault: true, createdAt: "0" },
 ];
 
 const LEGACY_CATEGORY_ALIASES: Record<string, string> = {
-  good: "good",
+  study: "study",
   health: "health",
-  binary: "binary",
-  bad: "bad",
-  "good habits": "good",
-  "bad habits": "bad",
+  islam: "islam",
+  good: "study",
+  binary: "health",
+  bad: "islam",
+  diet: "health",
+  "good habits": "study",
+  "bad habits": "islam",
 };
 
 function normalizeAlias(raw: string): string {
@@ -43,7 +50,8 @@ function normalizeStoredCategory(raw: unknown): FlexCategory | null {
   const id = typeof o.id === "string" && o.id.length > 0 ? o.id : null;
   const name = typeof o.name === "string" && o.name.trim() ? o.name.trim() : null;
   const isDefault = o.isDefault === true;
-  const createdAt = typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString();
+  const createdAt =
+    typeof o.createdAt === "string" ? o.createdAt : new Date().toISOString();
   if (!id || !name) return null;
   return { id, name, isDefault, createdAt };
 }
@@ -89,10 +97,13 @@ export function sortCategoriesForDisplay(list: FlexCategory[]): FlexCategory[] {
 
 export function categoryLabel(list: FlexCategory[], id: string): string {
   const c = list.find((x) => x.id === id);
-  return c?.name ?? id;
+  if (c) return c.name;
+  if (DEFAULT_CATEGORY_IDS.includes(id as DefaultCategoryId)) {
+    return CATEGORY_LABELS[id as DefaultCategoryId];
+  }
+  return id;
 }
 
-/** Always include built-in Good / Health / Binary / Bad categories. */
 export function ensureDefaultCategories(list: FlexCategory[]): FlexCategory[] {
   const byId = new Map<string, FlexCategory>();
   for (const d of DEFAULT_CATEGORY_LIST) byId.set(d.id, d);
@@ -100,19 +111,17 @@ export function ensureDefaultCategories(list: FlexCategory[]): FlexCategory[] {
   return sortCategoriesForDisplay([...byId.values()]);
 }
 
-/** Map habit category to a valid category id (defaults to good). */
 export function resolveHabitCategoryId(
   categoryId: string | undefined,
   list: FlexCategory[]
 ): string {
   const cats = ensureDefaultCategories(list);
-  return migrateHabitCategoryId(categoryId ?? "good", cats);
+  return migrateHabitCategoryId(categoryId ?? "study", cats);
 }
 
-/** Map stored habit category string to canonical id. */
 export function migrateHabitCategoryId(raw: string, list: FlexCategory[]): string {
   const t = raw.trim();
-  if (!t) return "good";
+  if (!t) return "study";
   if (list.some((c) => c.id === t)) return t;
   const norm = normalizeAlias(t);
   if (list.some((c) => c.id === norm)) return norm;
@@ -120,7 +129,7 @@ export function migrateHabitCategoryId(raw: string, list: FlexCategory[]): strin
   const match = list.find((c) => c.name.trim().toLowerCase() === lower);
   if (match) return match.id;
   if (t.length > 0) return t;
-  return "good";
+  return "study";
 }
 
 export function ensureCategoryForHabits(

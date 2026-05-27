@@ -11,7 +11,7 @@ type Props = {
   onClose: () => void;
   onConfirmDelete: () => void;
   onConfirmMove: (moveToCategoryId: string) => void;
-  onConfirmMoveToGood: () => void;
+  onConfirmMoveToStudy: () => void;
 };
 
 export default function DeleteCategoryModal({
@@ -21,14 +21,14 @@ export default function DeleteCategoryModal({
   onClose,
   onConfirmDelete,
   onConfirmMove,
-  onConfirmMoveToGood,
+  onConfirmMoveToStudy,
 }: Props) {
   const titleId = useId();
   const targets = categories.filter((c) => c.id !== category.id);
-  const [moveTo, setMoveTo] = useState(targets[0]?.id ?? "good");
+  const [moveTo, setMoveTo] = useState(targets[0]?.id ?? "study");
   const effectiveMoveTo = targets.some((c) => c.id === moveTo)
     ? moveTo
-    : (targets[0]?.id ?? "good");
+    : (targets[0]?.id ?? "study");
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -96,10 +96,10 @@ export default function DeleteCategoryModal({
             </button>
             <button
               type="button"
-              onClick={onConfirmMoveToGood}
+              onClick={onConfirmMoveToStudy}
               className="w-full rounded-xl border border-[var(--foreground)]/15 px-4 py-2.5 text-sm font-medium text-[var(--foreground)]/75 hover:bg-[var(--foreground)]/8"
             >
-              Move habits to Good Habits
+              Move habits to Study
             </button>
           </div>
         ) : (

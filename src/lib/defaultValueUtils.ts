@@ -5,6 +5,7 @@ import {
   type ValuesByDate,
 } from "@/lib/flexHabitStorage";
 import { isBadOccurrenceHabit, isWeightHabit } from "@/lib/graphUtils";
+import { habitValueToScalar } from "@/lib/habitScalar";
 
 export function habitDefaultAppliesToGraphs(habit: HabitDefinition): boolean {
   const d = habit.defaultValue;
@@ -87,9 +88,12 @@ export function resolveDailyActual(
     };
   }
 
-  if (habit.type === "duration") {
-    if (hasStored && v.type === "duration") {
-      return { value: v.hours + v.minutes / 60, assumed: false };
+  if (habit.type === "duration" || habit.type === "sleep_late") {
+    if (hasStored && valueMatchesStored(habit.type, v)) {
+      return {
+        value: habitValueToScalar(habit, v) ?? null,
+        assumed: false,
+      };
     }
     if (habitDefaultAppliesToGraphs(habit)) {
       return { value: habit.defaultValue!.value, assumed: true };
@@ -97,5 +101,20 @@ export function resolveDailyActual(
     return { value: null, assumed: false };
   }
 
+  if (habit.type === "gym" || habit.type === "five_k") {
+    if (!hasStored) return { value: null, assumed: false };
+    return {
+      value: habitValueToScalar(habit, v) ?? null,
+      assumed: false,
+    };
+  }
+
   return { value: null, assumed: false };
+}
+
+function valueMatchesStored(
+  type: HabitDefinition["type"],
+  v: HabitValue
+): boolean {
+  return v.type === type;
 }

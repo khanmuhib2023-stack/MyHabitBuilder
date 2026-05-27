@@ -3,6 +3,7 @@ import {
   getDailyTargetScalar,
   getWeeklyChartTargetScalar,
 } from "@/lib/targetUtils";
+import { formatDurationHours } from "@/lib/durationFormat";
 import { isBadOccurrenceHabit, isWeightHabit } from "@/lib/graphUtils";
 
 export type ChartValuePoint = {
@@ -111,8 +112,16 @@ export function formatYAxisTick(
   if (habit.type === "checkbox" || isBadOccurrenceHabit(habit)) {
     return String(Math.round(value));
   }
-  if (habit.type === "duration") {
-    return Number.isInteger(value) ? String(value) : value.toFixed(1);
+  if (
+    habit.type === "duration" ||
+    habit.type === "sleep_late" ||
+    habit.scoringKey === "study_duration" ||
+    habit.scoringKey === "quran"
+  ) {
+    return formatDurationHours(value);
+  }
+  if (habit.type === "five_k" && habit.unit === "km") {
+    return `${value.toFixed(1)} km`;
   }
   if (isWeightHabit(habit)) {
     return value.toFixed(1);

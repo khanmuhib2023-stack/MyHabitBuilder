@@ -19,6 +19,7 @@ import {
 import { categoryLabel, resolveHabitCategoryId } from "@/lib/categoryUtils";
 import { habitCountInCategory } from "@/lib/categoryDelete";
 import { useAppData } from "@/components/providers/AppDataProvider";
+import { totalDailyScore } from "@/lib/cloudMappers";
 import { toYmd } from "@/lib/weekRange";
 
 function initialSectionOpen(
@@ -40,7 +41,9 @@ export default function FlexHabitTracker() {
     hydrated,
     dataLoading,
     error,
+    setupWarning,
     clearError,
+    clearSetupWarning,
     definitions,
     values,
     categories,
@@ -89,6 +92,11 @@ export default function FlexHabitTracker() {
     }
     return map;
   }, [comments]);
+
+  const dailyTotalScore = useMemo(() => {
+    if (!todayYmd) return null;
+    return totalDailyScore(definitions, values, todayYmd);
+  }, [definitions, values, todayYmd]);
 
   const byCategory = useMemo(() => {
     const map: Record<string, HabitDefinition[]> = {};
@@ -205,6 +213,12 @@ export default function FlexHabitTracker() {
           </h1>
           <p className="mt-1 text-sm text-[var(--foreground)]/50">
             Today · {todayYmd}
+            {dailyTotalScore !== null ? (
+              <span className="ml-2 tabular-nums text-sky-300/80">
+                · {dailyTotalScore >= 0 ? "+" : ""}
+                {dailyTotalScore} pts
+              </span>
+            ) : null}
           </p>
         </div>
         <div className="flex shrink-0 items-center gap-1.5">
@@ -229,6 +243,22 @@ export default function FlexHabitTracker() {
           </button>
         </div>
       </header>
+
+      {setupWarning ? (
+        <p
+          className="mb-4 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2.5 text-sm text-amber-100/90"
+          role="status"
+        >
+          {setupWarning}
+          <button
+            type="button"
+            onClick={clearSetupWarning}
+            className="ml-2 underline hover:no-underline"
+          >
+            Dismiss
+          </button>
+        </p>
+      ) : null}
 
       {error ? (
         <p
@@ -326,8 +356,8 @@ export default function FlexHabitTracker() {
             onConfirmMove={(toId) =>
               void finishDeleteCategory(deleteCategoryId, toId)
             }
-            onConfirmMoveToGood={() =>
-              void finishDeleteCategory(deleteCategoryId, "good")
+            onConfirmMoveToStudy={() =>
+              void finishDeleteCategory(deleteCategoryId, "study")
             }
           />
         );

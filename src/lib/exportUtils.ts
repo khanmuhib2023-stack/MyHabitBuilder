@@ -4,6 +4,7 @@ import { getHabitComments } from "@/lib/commentStorage";
 import {
   loadDefinitions,
   loadValues,
+  type EncodedValue,
   type ValuesByDate,
 } from "@/lib/flexHabitStorage";
 import {
@@ -14,11 +15,6 @@ import {
   formatDateForCsv,
   formatTimeForCsv,
 } from "@/lib/csvUtils";
-
-type EncodedValue =
-  | { k: "c"; v: boolean; s?: "d" | "m" }
-  | { k: "n"; v: number; s?: "d" | "m" }
-  | { k: "d"; h: number; m: number; s?: "d" | "m" };
 
 function habitMap(defs: HabitDefinition[]): Map<string, HabitDefinition> {
   return new Map(defs.map((h) => [h.id, h]));
@@ -66,18 +62,45 @@ function encodedToFields(
   if (enc.k === "n") {
     return {
       logType: "number",
-      value: String(enc.v),
+      value: enc.u === 1 ? "" : String(enc.v),
       unit,
-      count: String(enc.v),
+      count: enc.u === 1 ? "" : String(enc.v),
     };
   }
-  const hours = enc.h + enc.m / 60;
-  return {
-    logType: "duration",
-    value: String(hours),
-    unit: "h",
-    count: "",
-  };
+  if (enc.k === "d") {
+    const hours = enc.h + enc.m / 60;
+    return {
+      logType: "duration",
+      value: String(hours),
+      unit: "h",
+      count: "",
+    };
+  }
+  if (enc.k === "g") {
+    return {
+      logType: "gym",
+      value: JSON.stringify(enc),
+      unit: "",
+      count: "",
+    };
+  }
+  if (enc.k === "5") {
+    return {
+      logType: "five_k",
+      value: String(enc.km),
+      unit: "km",
+      count: String(enc.h * 60 + enc.m),
+    };
+  }
+  if (enc.k === "sl") {
+    return {
+      logType: "sleep_late",
+      value: String(enc.h * 60 + enc.m),
+      unit: "min late",
+      count: "",
+    };
+  }
+  return { logType: "unknown", value: "", unit: "", count: "" };
 }
 
 export function buildHabitLogsCsvRows(
@@ -110,7 +133,7 @@ export function buildHabitLogsCsvRows(
       const ts = new Date(`${ymd}T12:00:00`).toISOString();
       const fields = encodedToFields(enc, habit);
       const source: HabitLogSource =
-        enc.s === "d" ? "default" : "manual";
+        "s" in enc && enc.s === "d" ? "default" : "manual";
       rows.push([
         `${habitId}_${ymd}`,
         formatDateForCsv(ymd),
@@ -118,7 +141,7 @@ export function buildHabitLogsCsvRows(
         ts,
         habitId,
         habit?.name ?? habitId,
-        categoryName(cats, habit, habit?.category ?? "good"),
+        categoryName(cats, habit, habit?.category ?? "study"),
         fields.logType,
         fields.value,
         fields.unit,

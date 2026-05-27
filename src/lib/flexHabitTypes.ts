@@ -1,6 +1,4 @@
-export type HabitType = "checkbox" | "number" | "duration";
-
-/** Category id (built-in: good | health | binary | bad, or custom cat_…). */
+/** Category id (built-in: study | health | islam, or custom cat_…). */
 export type HabitCategoryId = string;
 
 export type TargetMode = "at_least" | "at_most" | "exact";
@@ -11,6 +9,9 @@ export type HabitTarget = {
   unit?: string;
   mode: TargetMode;
   period: TargetPeriod;
+  /** Duration goal: optional hours (0–24). Minutes still in `value` as total minutes OR use with goalMinutes. */
+  goalHours?: number;
+  goalMinutes?: number;
 };
 
 export type HabitDefaultApplyMode =
@@ -24,52 +25,100 @@ export type HabitDefaultValue = {
   applyMode: HabitDefaultApplyMode;
 };
 
+export type HabitLogSource = "manual" | "default";
+
+/** How values are captured in the UI. */
+export type HabitType =
+  | "checkbox"
+  | "number"
+  | "duration"
+  | "gym"
+  | "five_k"
+  | "sleep_late";
+
+/** Dispatch key for `scoringEngine` (easy to tune per habit). */
+export type HabitScoringKey =
+  | "generic"
+  | "study_duration"
+  | "steps"
+  | "morning_routine"
+  | "gym"
+  | "five_k"
+  | "sleep_late"
+  | "calories"
+  | "protein"
+  | "creatine"
+  | "rule1"
+  | "quran"
+  | "rakats"
+  | "bad_occurrence";
+
+export type GymWorkoutKey =
+  | "chest_back"
+  | "biceps_triceps"
+  | "legs_shoulders";
+
+export type GymExerciseEntry = {
+  /** Max weight or max reps depending on exercise. */
+  value: number;
+  /** At least 3 sets completed. */
+  sets3Plus: boolean;
+};
+
+export type HabitValue =
+  | { type: "checkbox"; checked: boolean }
+  | { type: "number"; value: number; /** Empty / dash — not entered */ unset?: boolean }
+  | { type: "duration"; hours: number; minutes: number }
+  | {
+      type: "gym";
+      workout: GymWorkoutKey;
+      exercises: Record<string, GymExerciseEntry>;
+    }
+  | {
+      type: "five_k";
+      distanceKm: number;
+      hours: number;
+      minutes: number;
+    }
+  | { type: "sleep_late"; hoursLate: number; minutesLate: number };
+
 export type HabitDefinition = {
   id: string;
   name: string;
   category: HabitCategoryId;
   type: HabitType;
-  /** Shown after the input when set (e.g. kg, kcal, steps). */
   unit?: string;
   target?: HabitTarget;
   defaultValue?: HabitDefaultValue;
+  scoringKey?: HabitScoringKey;
+  /** Extra config (e.g. fiveKGoalKm). Synced when Supabase `meta` exists. */
+  meta?: Record<string, unknown>;
 };
 
-export type HabitLogSource = "manual" | "default";
-
-export type HabitValue =
-  | { type: "checkbox"; checked: boolean }
-  | { type: "number"; value: number }
-  | { type: "duration"; hours: number; minutes: number };
-
-/** Built-in category ids (fixed order for dashboard). */
-export const DEFAULT_CATEGORY_IDS = [
-  "good",
-  "health",
-  "binary",
-  "bad",
-] as const;
+/** Built-in category ids (fixed order). */
+export const DEFAULT_CATEGORY_IDS = ["study", "health", "islam"] as const;
 
 export type DefaultCategoryId = (typeof DEFAULT_CATEGORY_IDS)[number];
 
 export const CATEGORY_LABELS: Record<DefaultCategoryId, string> = {
-  good: "Good Habits",
+  study: "Study",
   health: "Health",
-  binary: "Binary",
-  bad: "Bad Habits",
+  islam: "Islam",
 };
 
 export const CATEGORY_DEFAULT_OPEN: Record<DefaultCategoryId, boolean> = {
-  good: true,
+  study: true,
   health: true,
-  binary: false,
-  bad: false,
+  islam: false,
 };
 
 export const TYPE_LABELS: Record<HabitType, string> = {
   checkbox: "Checkbox",
   number: "Number",
   duration: "Duration",
+  gym: "Gym tracker",
+  five_k: "5K tracker",
+  sleep_late: "Sleep (late to bed)",
 };
 
 export function defaultValueFor(type: HabitType): HabitValue {
@@ -80,6 +129,16 @@ export function defaultValueFor(type: HabitType): HabitValue {
       return { type: "number", value: 0 };
     case "duration":
       return { type: "duration", hours: 0, minutes: 0 };
+    case "gym":
+      return {
+        type: "gym",
+        workout: "chest_back",
+        exercises: {},
+      };
+    case "five_k":
+      return { type: "five_k", distanceKm: 0, hours: 0, minutes: 0 };
+    case "sleep_late":
+      return { type: "sleep_late", hoursLate: 0, minutesLate: 0 };
   }
 }
 

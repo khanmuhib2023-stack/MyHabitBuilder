@@ -2,9 +2,11 @@ import type {
   HabitDefinition,
   HabitDefaultValue,
   HabitLogSource,
+  HabitScoringKey,
   HabitTarget,
   HabitType,
   HabitValue,
+  GymWorkoutKey,
 } from "@/lib/flexHabitTypes";
 import { defaultValueFor, valueMatchesType } from "@/lib/flexHabitTypes";
 import { loadCategories, migrateHabitCategoryId } from "@/lib/categoryUtils";
@@ -14,7 +16,31 @@ export const FLEX_HABIT_VALUES_KEY = "flexHabitValuesByDate";
 
 const YMD = /^\d{4}-\d{2}-\d{2}$/;
 
-const TYPES: HabitType[] = ["checkbox", "number", "duration"];
+const TYPES: HabitType[] = [
+  "checkbox",
+  "number",
+  "duration",
+  "gym",
+  "five_k",
+  "sleep_late",
+];
+
+const SCORING_KEYS: HabitScoringKey[] = [
+  "generic",
+  "study_duration",
+  "steps",
+  "morning_routine",
+  "gym",
+  "five_k",
+  "sleep_late",
+  "calories",
+  "protein",
+  "creatine",
+  "rule1",
+  "quran",
+  "rakats",
+  "bad_occurrence",
+];
 
 function newHabitId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -23,66 +49,115 @@ function newHabitId(): string {
   return `${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
 }
 
-/** Starter habits matching the product examples (editable by the user). */
 export const DEFAULT_HABIT_DEFINITIONS: HabitDefinition[] = [
+  {
+    id: "seed-study-time",
+    name: "Study Time",
+    category: "study",
+    type: "duration",
+    scoringKey: "study_duration",
+  },
   {
     id: "seed-steps",
     name: "Steps",
     category: "health",
     type: "number",
     unit: "steps",
+    scoringKey: "steps",
+    target: { value: 10000, mode: "at_least", period: "daily", unit: "steps" },
   },
   {
-    id: "seed-weight",
-    name: "Weight",
+    id: "seed-morning-routine",
+    name: "Morning Routine",
     category: "health",
     type: "number",
-    unit: "kg",
+    scoringKey: "morning_routine",
   },
   {
-    id: "seed-sleep",
-    name: "Sleep",
+    id: "seed-gym",
+    name: "Gym",
     category: "health",
-    type: "duration",
+    type: "gym",
+    scoringKey: "gym",
+  },
+  {
+    id: "seed-5k",
+    name: "5K",
+    category: "health",
+    type: "five_k",
+    scoringKey: "five_k",
+    meta: { fiveKGoalKm: 5 },
+    target: { value: 5, mode: "at_least", period: "daily", unit: "km" },
+  },
+  {
+    id: "seed-sleep-late",
+    name: "Sleep Time",
+    category: "health",
+    type: "sleep_late",
+    scoringKey: "sleep_late",
   },
   {
     id: "seed-calories",
     name: "Calories",
-    category: "good",
+    category: "health",
     type: "number",
     unit: "kcal",
+    scoringKey: "calories",
+    target: { value: 2500, mode: "at_most", period: "daily", unit: "kcal" },
   },
   {
     id: "seed-protein",
     name: "Protein",
-    category: "good",
+    category: "health",
     type: "number",
     unit: "g",
-  },
-  {
-    id: "seed-prayer",
-    name: "Prayer",
-    category: "good",
-    type: "number",
+    scoringKey: "protein",
+    target: { value: 150, mode: "at_least", period: "daily", unit: "g" },
   },
   {
     id: "seed-creatine",
-    name: "Creatine",
-    category: "binary",
-    type: "checkbox",
+    name: "Creatine Taken",
+    category: "health",
+    type: "number",
+    unit: "g",
+    scoringKey: "creatine",
   },
   {
-    id: "seed-addiction",
-    name: "Addiction",
-    category: "bad",
+    id: "seed-rule1",
+    name: "Rule Number 1",
+    category: "islam",
     type: "number",
+    scoringKey: "rule1",
+  },
+  {
+    id: "seed-quran",
+    name: "Quran Study",
+    category: "islam",
+    type: "duration",
+    scoringKey: "quran",
+  },
+  {
+    id: "seed-prayer",
+    name: "Prayer Times",
+    category: "islam",
+    type: "number",
+    unit: "rakats",
+    scoringKey: "rakats",
   },
 ];
 
-type EncodedValue =
+export type EncodedValue =
   | { k: "c"; v: boolean; s?: "d" | "m" }
-  | { k: "n"; v: number; s?: "d" | "m" }
-  | { k: "d"; h: number; m: number; s?: "d" | "m" };
+  | { k: "n"; v: number; s?: "d" | "m"; u?: 1 }
+  | { k: "d"; h: number; m: number; s?: "d" | "m" }
+  | {
+      k: "g";
+      w: GymWorkoutKey;
+      e: Record<string, { v: number; s: boolean }>;
+      s?: "d" | "m";
+    }
+  | { k: "5"; km: number; h: number; m: number; s?: "d" | "m" }
+  | { k: "sl"; h: number; m: number; s?: "d" | "m" };
 
 function encodeValue(
   val: HabitValue,
@@ -93,9 +168,29 @@ function encodeValue(
     case "checkbox":
       return { k: "c", v: val.checked, s };
     case "number":
-      return { k: "n", v: val.value, s };
+      return {
+        k: "n",
+        v: val.unset ? 0 : val.value,
+        s,
+        ...(val.unset ? { u: 1 } : {}),
+      };
     case "duration":
       return { k: "d", h: val.hours, m: val.minutes, s };
+    case "gym":
+      return {
+        k: "g",
+        w: val.workout,
+        e: Object.fromEntries(
+          Object.entries(val.exercises).map(([id, ex]) => [
+            id,
+            { v: ex.value, s: ex.sets3Plus },
+          ])
+        ),
+      };
+    case "five_k":
+      return { k: "5", km: val.distanceKm, h: val.hours, m: val.minutes, s };
+    case "sleep_late":
+      return { k: "sl", h: val.hoursLate, m: val.minutesLate, s };
   }
 }
 
@@ -106,29 +201,66 @@ function decodeValue(raw: unknown, type: HabitType): HabitValue {
   if (type === "checkbox" && o.k === "c" && typeof o.v === "boolean") {
     return { type: "checkbox", checked: o.v };
   }
-  if (
-    type === "number" &&
-    o.k === "n" &&
-    typeof o.v === "number" &&
-    Number.isFinite(o.v)
-  ) {
+  if (type === "number" && o.k === "n" && typeof o.v === "number") {
     return {
       type: "number",
       value: Math.min(1_000_000_000, Math.max(0, Math.trunc(o.v))),
+      unset: o.u === 1,
     };
   }
   if (
     type === "duration" &&
     o.k === "d" &&
     typeof o.h === "number" &&
-    typeof o.m === "number" &&
-    Number.isFinite(o.h) &&
-    Number.isFinite(o.m)
+    typeof o.m === "number"
   ) {
     return {
       type: "duration",
       hours: Math.min(24, Math.max(0, Math.trunc(o.h))),
       minutes: Math.min(59, Math.max(0, Math.trunc(o.m))),
+    };
+  }
+  if (type === "gym" && o.k === "g" && typeof o.w === "string") {
+    const ex: Record<string, { value: number; sets3Plus: boolean }> = {};
+    if (o.e && typeof o.e === "object") {
+      for (const [id, row] of Object.entries(o.e)) {
+        if (row && typeof row === "object") {
+          const r = row as { v?: number; s?: boolean };
+          ex[id] = {
+            value: Math.max(0, Math.trunc(Number(r.v) || 0)),
+            sets3Plus: Boolean(r.s),
+          };
+        }
+      }
+    }
+    return {
+      type: "gym",
+      workout: o.w as GymWorkoutKey,
+      exercises: ex,
+    };
+  }
+  if (
+    type === "five_k" &&
+    o.k === "5" &&
+    typeof o.km === "number"
+  ) {
+    return {
+      type: "five_k",
+      distanceKm: Math.max(0, o.km),
+      hours: Math.min(24, Math.max(0, Math.trunc(o.h ?? 0))),
+      minutes: Math.min(59, Math.max(0, Math.trunc(o.m ?? 0))),
+    };
+  }
+  if (
+    type === "sleep_late" &&
+    o.k === "sl" &&
+    typeof o.h === "number" &&
+    typeof o.m === "number"
+  ) {
+    return {
+      type: "sleep_late",
+      hoursLate: Math.min(12, Math.max(0, Math.trunc(o.h))),
+      minutesLate: Math.min(59, Math.max(0, Math.trunc(o.m))),
     };
   }
   return fallback;
@@ -162,6 +294,14 @@ function normalizeTarget(raw: unknown): HabitTarget | undefined {
   const period = o.period;
   const unit =
     typeof o.unit === "string" && o.unit.trim() ? o.unit.trim() : undefined;
+  const goalHours =
+    typeof o.goalHours === "number" && Number.isFinite(o.goalHours)
+      ? o.goalHours
+      : undefined;
+  const goalMinutes =
+    typeof o.goalMinutes === "number" && Number.isFinite(o.goalMinutes)
+      ? o.goalMinutes
+      : undefined;
   if (value == null) return undefined;
   if (mode !== "at_least" && mode !== "at_most" && mode !== "exact")
     return undefined;
@@ -171,6 +311,8 @@ function normalizeTarget(raw: unknown): HabitTarget | undefined {
     mode,
     period,
     unit,
+    goalHours,
+    goalMinutes,
   };
 }
 
@@ -186,13 +328,20 @@ function normalizeDefinition(raw: unknown): HabitDefinition | null {
   const category =
     typeof o.category === "string" && o.category.trim()
       ? migrateHabitCategoryId(o.category.trim(), cats)
-      : "good";
+      : "study";
   const target = normalizeTarget(o.target);
   const defaultValue = normalizeDefaultValue(o.defaultValue);
+  const scoringKey = o.scoringKey as HabitScoringKey;
+  const meta =
+    o.meta && typeof o.meta === "object" && !Array.isArray(o.meta)
+      ? (o.meta as Record<string, unknown>)
+      : undefined;
   if (!id || !name || !TYPES.includes(type)) return null;
   const base: HabitDefinition = { id, name, category, type, unit };
   if (target) base.target = target;
   if (defaultValue) base.defaultValue = defaultValue;
+  if (scoringKey && SCORING_KEYS.includes(scoringKey)) base.scoringKey = scoringKey;
+  if (meta) base.meta = meta;
   return base;
 }
 
@@ -221,6 +370,19 @@ export function saveDefinitions(defs: HabitDefinition[]): void {
 
 export type ValuesByDate = Record<string, Record<string, EncodedValue>>;
 
+function isEncodedValue(raw: unknown): raw is EncodedValue {
+  if (raw === null || typeof raw !== "object") return false;
+  const k = (raw as EncodedValue).k;
+  return (
+    k === "c" ||
+    k === "n" ||
+    k === "d" ||
+    k === "g" ||
+    k === "5" ||
+    k === "sl"
+  );
+}
+
 export function loadValues(): ValuesByDate {
   if (typeof window === "undefined") return {};
   try {
@@ -239,16 +401,7 @@ export function loadValues(): ValuesByDate {
       const inner: Record<string, EncodedValue> = {};
       for (const [hid, enc] of Object.entries(day as Record<string, unknown>)) {
         if (typeof hid !== "string" || hid.length === 0) continue;
-        if (enc === null || typeof enc !== "object") continue;
-        const e = enc as EncodedValue;
-        if (e.k === "c" && typeof e.v === "boolean") inner[hid] = e;
-        else if (e.k === "n" && typeof e.v === "number") inner[hid] = e;
-        else if (
-          e.k === "d" &&
-          typeof e.h === "number" &&
-          typeof e.m === "number"
-        )
-          inner[hid] = e;
+        if (isEncodedValue(enc)) inner[hid] = enc;
       }
       out[ymd] = inner;
     }
@@ -303,7 +456,7 @@ export function getLogSourceForHabit(
 ): HabitLogSource | null {
   const enc = values[ymd]?.[habitId];
   if (!enc) return null;
-  return enc.s === "d" ? "default" : "manual";
+  return "s" in enc && enc.s === "d" ? "default" : "manual";
 }
 
 export function setValueForHabit(
@@ -331,9 +484,8 @@ export function removeHabitFromValues(
   const next: ValuesByDate = {};
   for (const [ymd, day] of Object.entries(values)) {
     if (!day || typeof day !== "object") continue;
-    const copy = { ...day };
-    delete copy[habitId];
-    if (Object.keys(copy).length > 0) next[ymd] = copy;
+    const { [habitId]: _, ...rest } = day;
+    if (Object.keys(rest).length > 0) next[ymd] = rest;
   }
   return next;
 }
@@ -351,6 +503,9 @@ export function updateHabitDefinition(
     }
     if ("defaultValue" in patch && patch.defaultValue === undefined) {
       delete merged.defaultValue;
+    }
+    if ("meta" in patch && patch.meta === undefined) {
+      delete merged.meta;
     }
     return merged;
   });
@@ -371,6 +526,9 @@ export function appendDefinition(
     type: partial.type,
     unit,
     ...(partial.target ? { target: partial.target } : {}),
+    ...(partial.defaultValue ? { defaultValue: partial.defaultValue } : {}),
+    ...(partial.scoringKey ? { scoringKey: partial.scoringKey } : {}),
+    ...(partial.meta ? { meta: partial.meta } : {}),
   };
   return [...defs, next];
 }

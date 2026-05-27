@@ -142,15 +142,17 @@ function resolveCategoryId(
   categoryInput: string
 ): string {
   const t = categoryInput.trim();
-  if (!t) return "good";
+  if (!t) return "study";
   const byId = cats.find((c) => c.id === t);
   if (byId) return byId.id;
   const lower = t.toLowerCase();
   const byName = cats.find((c) => c.name.trim().toLowerCase() === lower);
   if (byName) return byName.id;
-  if (lower === "good habits") return "good";
+  if (lower === "good habits" || lower === "study") return "study";
+  if (lower === "health") return "health";
+  if (lower === "islam" || lower === "bad habits") return "islam";
   if (lower === "bad habits") return "bad";
-  return "good";
+  return "study";
 }
 
 function inferLogType(
