@@ -10,6 +10,7 @@ import type {
 } from "@/lib/flexHabitTypes";
 import { defaultValueFor, valueMatchesType } from "@/lib/flexHabitTypes";
 import { loadCategories, migrateHabitCategoryId } from "@/lib/categoryUtils";
+import { normalizeScoringKey } from "@/lib/scoringEngine";
 
 export const FLEX_HABIT_DEFINITIONS_KEY = "flexHabitDefinitions";
 export const FLEX_HABIT_VALUES_KEY = "flexHabitValuesByDate";
@@ -27,7 +28,7 @@ const TYPES: HabitType[] = [
 
 const SCORING_KEYS: HabitScoringKey[] = [
   "generic",
-  "study_duration",
+  "study_time",
   "steps",
   "morning_routine",
   "gym",
@@ -36,10 +37,9 @@ const SCORING_KEYS: HabitScoringKey[] = [
   "calories",
   "protein",
   "creatine",
-  "rule1",
-  "quran",
-  "rakats",
-  "bad_occurrence",
+  "bad_habit_rule_1",
+  "quran_study",
+  "prayer_rakats",
 ];
 
 function newHabitId(): string {
@@ -55,7 +55,7 @@ export const DEFAULT_HABIT_DEFINITIONS: HabitDefinition[] = [
     name: "Study Time",
     category: "study",
     type: "duration",
-    scoringKey: "study_duration",
+    scoringKey: "study_time",
   },
   {
     id: "seed-steps",
@@ -127,14 +127,14 @@ export const DEFAULT_HABIT_DEFINITIONS: HabitDefinition[] = [
     name: "Rule Number 1",
     category: "islam",
     type: "number",
-    scoringKey: "rule1",
+    scoringKey: "bad_habit_rule_1",
   },
   {
     id: "seed-quran",
     name: "Quran Study",
     category: "islam",
     type: "duration",
-    scoringKey: "quran",
+    scoringKey: "quran_study",
   },
   {
     id: "seed-prayer",
@@ -142,7 +142,7 @@ export const DEFAULT_HABIT_DEFINITIONS: HabitDefinition[] = [
     category: "islam",
     type: "number",
     unit: "rakats",
-    scoringKey: "rakats",
+    scoringKey: "prayer_rakats",
   },
 ];
 
@@ -331,7 +331,11 @@ function normalizeDefinition(raw: unknown): HabitDefinition | null {
       : "study";
   const target = normalizeTarget(o.target);
   const defaultValue = normalizeDefaultValue(o.defaultValue);
-  const scoringKey = o.scoringKey as HabitScoringKey;
+  const rawScoringKey =
+    typeof o.scoringKey === "string" ? o.scoringKey : undefined;
+  const scoringKey = rawScoringKey
+    ? normalizeScoringKey(rawScoringKey)
+    : "generic";
   const meta =
     o.meta && typeof o.meta === "object" && !Array.isArray(o.meta)
       ? (o.meta as Record<string, unknown>)
@@ -340,7 +344,9 @@ function normalizeDefinition(raw: unknown): HabitDefinition | null {
   const base: HabitDefinition = { id, name, category, type, unit };
   if (target) base.target = target;
   if (defaultValue) base.defaultValue = defaultValue;
-  if (scoringKey && SCORING_KEYS.includes(scoringKey)) base.scoringKey = scoringKey;
+  if (scoringKey !== "generic" && SCORING_KEYS.includes(scoringKey)) {
+    base.scoringKey = scoringKey;
+  }
   if (meta) base.meta = meta;
   return base;
 }

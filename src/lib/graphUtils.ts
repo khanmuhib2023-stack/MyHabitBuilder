@@ -13,7 +13,13 @@ import {
   goalDifferenceText,
   trendDirectionLabel,
 } from "@/lib/targetUtils";
-import { resolveDailyActual } from "@/lib/defaultValueUtils";
+import {
+  resolveDailyActual,
+  resolveFiveKDailyActual,
+  resolveGymExerciseDailyActual,
+} from "@/lib/defaultValueUtils";
+import type { GymWorkoutKey } from "@/lib/flexHabitTypes";
+import type { FiveKGraphMode } from "@/lib/habitScalar";
 import { parseYmdLocal, startOfWeekMonday, toYmd } from "@/lib/weekRange";
 
 const MONTHS = [
@@ -74,8 +80,7 @@ export function isWeightHabit(habit: HabitDefinition): boolean {
 
 export function isBadOccurrenceHabit(habit: HabitDefinition): boolean {
   return (
-    habit.scoringKey === "rule1" ||
-    habit.scoringKey === "bad_occurrence" ||
+    habit.scoringKey === "bad_habit_rule_1" ||
     (habit.category === "islam" &&
       habit.name.trim().toLowerCase().includes("rule"))
   );
@@ -384,14 +389,37 @@ export function dailyActualValue(
   return resolveDailyActual(habit, values, ymd).value;
 }
 
+export type DailySeriesOptions = {
+  gymWorkout?: GymWorkoutKey;
+  gymExerciseId?: string;
+  fiveKMode?: FiveKGraphMode;
+};
+
 export function buildDailySeries(
   habit: HabitDefinition,
   values: ValuesByDate,
-  days: { ymd: string; label: string }[]
+  days: { ymd: string; label: string }[],
+  options?: DailySeriesOptions
 ): DailySeriesPoint[] {
-  const resolved = days.map(({ ymd }) =>
-    resolveDailyActual(habit, values, ymd)
-  );
+  const resolved = days.map(({ ymd }) => {
+    if (
+      habit.type === "gym" &&
+      options?.gymWorkout &&
+      options?.gymExerciseId
+    ) {
+      return resolveGymExerciseDailyActual(
+        values,
+        ymd,
+        habit.id,
+        options.gymWorkout,
+        options.gymExerciseId
+      );
+    }
+    if (habit.type === "five_k" && options?.fiveKMode) {
+      return resolveFiveKDailyActual(habit, values, ymd, options.fiveKMode);
+    }
+    return resolveDailyActual(habit, values, ymd);
+  });
   const actuals = resolved.map((r) => r.value);
   const trends = calculateChartTrend(habit, actuals);
   const dt = habit.target ? getDailyTargetScalar(habit) : null;

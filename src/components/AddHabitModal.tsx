@@ -59,7 +59,8 @@ export default function AddHabitModal({
   }, [categories, category]);
 
   useEffect(() => {
-    if (type === "duration" && category === "study") setScoringKey("study_duration");
+    if (type === "duration" && category === "study") setScoringKey("study_time");
+    else if (type === "duration" && category === "islam") setScoringKey("quran_study");
     else if (type === "gym") setScoringKey("gym");
     else if (type === "five_k") setScoringKey("five_k");
     else if (type === "sleep_late") setScoringKey("sleep_late");
@@ -227,7 +228,7 @@ export default function AddHabitModal({
               className={selectClass}
             >
               <option value="generic">Generic</option>
-              <option value="study_duration">Study time</option>
+              <option value="study_time">Study time</option>
               <option value="steps">Steps</option>
               <option value="morning_routine">Morning routine</option>
               <option value="gym">Gym</option>
@@ -236,9 +237,9 @@ export default function AddHabitModal({
               <option value="calories">Calories</option>
               <option value="protein">Protein</option>
               <option value="creatine">Creatine</option>
-              <option value="rule1">Rule #1 (bad)</option>
-              <option value="quran">Quran study</option>
-              <option value="rakats">Prayer rakats</option>
+              <option value="bad_habit_rule_1">Rule #1 (bad)</option>
+              <option value="quran_study">Quran study</option>
+              <option value="prayer_rakats">Prayer rakats</option>
             </select>
           </div>
           <div>

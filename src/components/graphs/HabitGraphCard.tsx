@@ -13,10 +13,23 @@ import {
   getLast7GraphSubtitle,
   getMonthlyGraphSubtitle,
   getMonthsForYear,
+  type DailySeriesOptions,
   type GraphTab,
 } from "@/lib/graphUtils";
-import { computeDailyScore } from "@/lib/scoringEngine";
+import {
+  calculateHabitScoreForDate,
+} from "@/lib/scoringEngine";
 import { getValueForHabit } from "@/lib/flexHabitStorage";
+import type { GymWorkoutKey } from "@/lib/flexHabitTypes";
+import {
+  GYM_WORKOUT_EXERCISES,
+} from "@/lib/gymWorkouts";
+import {
+  isFiveKHabit,
+  isGymHabit,
+  type FiveKGraphMode,
+} from "@/lib/habitScalar";
+import GraphSeriesControls from "@/components/graphs/GraphSeriesControls";
 import Last7DaysGraph from "@/components/graphs/Last7DaysGraph";
 import MonthlyGraph from "@/components/graphs/MonthlyGraph";
 import ExpandedGraphModal from "@/components/graphs/ExpandedGraphModal";
@@ -52,6 +65,27 @@ export default function HabitGraphCard({
 }: Props) {
   const [expanded, setExpanded] = useState(false);
   const lastTapRef = useRef(0);
+  const [gymWorkout, setGymWorkout] = useState<GymWorkoutKey>("chest_back");
+  const [gymExerciseId, setGymExerciseId] = useState(
+    GYM_WORKOUT_EXERCISES.chest_back[0]?.id ?? "bench_press"
+  );
+  const [fiveKMode, setFiveKMode] = useState<FiveKGraphMode>("distance");
+
+  const seriesOptions: DailySeriesOptions | undefined = useMemo(() => {
+    if (isGymHabit(habit)) {
+      return { gymWorkout, gymExerciseId };
+    }
+    if (isFiveKHabit(habit)) {
+      return { fiveKMode };
+    }
+    return undefined;
+  }, [habit, gymWorkout, gymExerciseId, fiveKMode]);
+
+  const handleGymWorkoutChange = (w: GymWorkoutKey) => {
+    setGymWorkout(w);
+    const first = GYM_WORKOUT_EXERCISES[w][0]?.id;
+    if (first) setGymExerciseId(first);
+  };
 
   const openExpanded = () => setExpanded(true);
   const handleCardActivate = () => {
@@ -67,8 +101,8 @@ export default function HabitGraphCard({
   const months = useMemo(() => getMonthsForYear(chartYear), [chartYear]);
 
   const dailySeries = useMemo(
-    () => buildDailySeries(habit, values, last7),
-    [habit, values, last7]
+    () => buildDailySeries(habit, values, last7, seriesOptions),
+    [habit, values, last7, seriesOptions]
   );
 
   const monthlySeries = useMemo(
@@ -83,7 +117,12 @@ export default function HabitGraphCard({
         : buildMonthlySummary(habit, values, chartYear);
     const endY = last7[last7.length - 1]?.ymd;
     if (!endY) return base;
-    const sc = computeDailyScore(habit, getValueForHabit(values, endY, habit));
+    const sc = calculateHabitScoreForDate(
+      habit,
+      values,
+      endY,
+      getValueForHabit(values, endY, habit)
+    );
     if (sc == null || !Number.isFinite(sc)) return base;
     return [
       {
@@ -156,6 +195,23 @@ export default function HabitGraphCard({
             {habit.name}
           </h2>
         </header>
+
+        {isGymHabit(habit) ? (
+          <GraphSeriesControls
+            variant="gym"
+            workout={gymWorkout}
+            exerciseId={gymExerciseId}
+            onWorkoutChange={handleGymWorkoutChange}
+            onExerciseChange={setGymExerciseId}
+          />
+        ) : null}
+        {isFiveKHabit(habit) ? (
+          <GraphSeriesControls
+            variant="five_k"
+            mode={fiveKMode}
+            onModeChange={setFiveKMode}
+          />
+        ) : null}
 
         {tab === "last7" ? (
           <Last7DaysGraph

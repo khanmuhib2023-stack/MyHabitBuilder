@@ -36,10 +36,10 @@ export type HabitType =
   | "five_k"
   | "sleep_late";
 
-/** Dispatch key for `scoringEngine` (easy to tune per habit). */
+/** Dispatch key for `scoringEngine` (matches Google Sheets formulas). */
 export type HabitScoringKey =
   | "generic"
-  | "study_duration"
+  | "study_time"
   | "steps"
   | "morning_routine"
   | "gym"
@@ -48,10 +48,9 @@ export type HabitScoringKey =
   | "calories"
   | "protein"
   | "creatine"
-  | "rule1"
-  | "quran"
-  | "rakats"
-  | "bad_occurrence";
+  | "bad_habit_rule_1"
+  | "quran_study"
+  | "prayer_rakats";
 
 export type GymWorkoutKey =
   | "chest_back"

@@ -115,8 +115,8 @@ export function formatYAxisTick(
   if (
     habit.type === "duration" ||
     habit.type === "sleep_late" ||
-    habit.scoringKey === "study_duration" ||
-    habit.scoringKey === "quran"
+    habit.scoringKey === "study_time" ||
+    habit.scoringKey === "quran_study"
   ) {
     return formatDurationHours(value);
   }

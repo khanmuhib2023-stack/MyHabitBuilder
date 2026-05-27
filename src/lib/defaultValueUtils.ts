@@ -1,11 +1,19 @@
-import type { HabitDefinition, HabitValue } from "@/lib/flexHabitTypes";
+import type {
+  GymWorkoutKey,
+  HabitDefinition,
+  HabitValue,
+} from "@/lib/flexHabitTypes";
 import {
   getValueForHabit,
   hasStoredValueForHabit,
   type ValuesByDate,
 } from "@/lib/flexHabitStorage";
 import { isBadOccurrenceHabit, isWeightHabit } from "@/lib/graphUtils";
-import { habitValueToScalar } from "@/lib/habitScalar";
+import {
+  habitValueToScalar,
+  type FiveKGraphMode,
+} from "@/lib/habitScalar";
+import { normalizeScoringKey } from "@/lib/scoringEngine";
 
 export function habitDefaultAppliesToGraphs(habit: HabitDefinition): boolean {
   const d = habit.defaultValue;
@@ -72,6 +80,10 @@ export function resolveDailyActual(
       return { value: v.value, assumed: false };
     }
     if (hasStored && v.type === "number") {
+      const key = normalizeScoringKey(habit.scoringKey);
+      if (v.unset && (key === "calories" || key === "protein")) {
+        return { value: null, assumed: false };
+      }
       return { value: v.value, assumed: false };
     }
     if (habitDefaultAppliesToGraphs(habit)) {
@@ -101,7 +113,15 @@ export function resolveDailyActual(
     return { value: null, assumed: false };
   }
 
-  if (habit.type === "gym" || habit.type === "five_k") {
+  if (habit.type === "five_k") {
+    if (!hasStored) return { value: null, assumed: false };
+    return {
+      value: habitValueToScalar(habit, v, { fiveKMode: "distance" }) ?? null,
+      assumed: false,
+    };
+  }
+
+  if (habit.type === "gym") {
     if (!hasStored) return { value: null, assumed: false };
     return {
       value: habitValueToScalar(habit, v) ?? null,
@@ -110,6 +130,43 @@ export function resolveDailyActual(
   }
 
   return { value: null, assumed: false };
+}
+
+/** Gym graph: one exercise metric for a selected workout type. */
+export function resolveGymExerciseDailyActual(
+  values: ValuesByDate,
+  ymd: string,
+  habitId: string,
+  workout: GymWorkoutKey,
+  exerciseId: string
+): ResolvedDailyActual {
+  if (!hasStoredValueForHabit(values, ymd, habitId)) {
+    return { value: null, assumed: false };
+  }
+  const raw = values[ymd]?.[habitId];
+  if (!raw || raw.k !== "g") return { value: null, assumed: false };
+  if (raw.w !== workout) return { value: null, assumed: false };
+  const row = raw.e?.[exerciseId];
+  if (!row) return { value: 0, assumed: false };
+  return { value: row.v, assumed: false };
+}
+
+/** 5K graph: distance (km) or time (decimal hours). */
+export function resolveFiveKDailyActual(
+  habit: HabitDefinition,
+  values: ValuesByDate,
+  ymd: string,
+  mode: FiveKGraphMode
+): ResolvedDailyActual {
+  if (!hasStoredValueForHabit(values, ymd, habit.id)) {
+    return { value: null, assumed: false };
+  }
+  const v = getValueForHabit(values, ymd, habit);
+  if (v.type !== "five_k") return { value: null, assumed: false };
+  return {
+    value: habitValueToScalar(habit, v, { fiveKMode: mode }),
+    assumed: false,
+  };
 }
 
 function valueMatchesStored(

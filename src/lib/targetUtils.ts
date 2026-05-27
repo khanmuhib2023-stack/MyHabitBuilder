@@ -56,8 +56,7 @@ function isWeightHabit(habit: HabitDefinition): boolean {
 
 export function isBadOccurrenceHabit(habit: HabitDefinition): boolean {
   return (
-    habit.scoringKey === "rule1" ||
-    habit.scoringKey === "bad_occurrence" ||
+    habit.scoringKey === "bad_habit_rule_1" ||
     (habit.category === "islam" &&
       habit.name.trim().toLowerCase().includes("rule"))
   );

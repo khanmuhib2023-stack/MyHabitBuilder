@@ -1,4 +1,5 @@
 import type { FlexCategory } from "@/lib/categoryUtils";
+import { normalizeScoringKey } from "@/lib/scoringEngine";
 import {
   DEFAULT_CATEGORY_LIST,
   saveCategories,
@@ -109,7 +110,10 @@ export function cloudBundleToApp(
     };
     if (h.target) def.target = h.target;
     if (h.default_value) def.defaultValue = h.default_value;
-    if (h.scoring_key) def.scoringKey = h.scoring_key;
+    if (h.scoring_key) {
+      const key = normalizeScoringKey(h.scoring_key);
+      if (key !== "generic") def.scoringKey = key;
+    }
     if (h.meta) def.meta = h.meta;
     return def;
   });

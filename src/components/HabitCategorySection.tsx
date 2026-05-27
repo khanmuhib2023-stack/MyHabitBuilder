@@ -5,7 +5,7 @@ import type { HabitDefinition, HabitValue } from "@/lib/flexHabitTypes";
 import type { ValuesByDate } from "@/lib/flexHabitStorage";
 import { getValueForHabit } from "@/lib/flexHabitStorage";
 import { formatDefaultText } from "@/lib/defaultValueUtils";
-import { computeDailyScore } from "@/lib/scoringEngine";
+import { calculateHabitScoreForDate } from "@/lib/scoringEngine";
 import {
   calculateHabitStreak,
   formatTargetText,
@@ -137,7 +137,12 @@ export default function HabitCategorySection({
                 const streakTx = streakLabel(habit, streak);
                 const statusTx = todayStatusLine(habit, values, todayYmd);
                 const val = getValueForHabit(values, todayYmd, habit);
-                const score = computeDailyScore(habit, val);
+                const score = calculateHabitScoreForDate(
+                  habit,
+                  values,
+                  todayYmd,
+                  val
+                );
                 const scoreText =
                   score != null && Number.isFinite(score)
                     ? `${score >= 0 ? "+" : ""}${Math.round(score * 10) / 10} pts`

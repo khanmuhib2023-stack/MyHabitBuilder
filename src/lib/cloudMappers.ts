@@ -1,7 +1,7 @@
 import type { FlexCategory } from "@/lib/categoryUtils";
 import { categoryLabel } from "@/lib/categoryUtils";
 import type { CloudHabitInput, CloudLogInput } from "@/lib/cloudStorage";
-import { computeDailyScore } from "@/lib/scoringEngine";
+import { calculateHabitScore } from "@/lib/scoringEngine";
 import {
   CATEGORY_LABELS,
   DEFAULT_CATEGORY_IDS,
@@ -91,9 +91,9 @@ export function encodeValueForCloud(
 ): CloudLogInput {
   const source =
     "s" in enc && enc.s === "d" ? "default" : "manual";
-  const ts = `${logDate}T12:00:00.000Z`;
+  const ts = new Date().toISOString();
   const habitValue = encodedToHabitValue(enc, habit);
-  const score = computeDailyScore(habit, habitValue);
+  const score = calculateHabitScore(habit, habitValue, { hasStored: true });
   const base = {
     sync_code: syncCode,
     habit_id: habitId,
@@ -243,7 +243,8 @@ export function totalDailyScore(
   let sum = 0;
   for (const h of definitions) {
     const v = getValueForHabit(values, ymd, h);
-    const s = computeDailyScore(h, v);
+    const hasStored = Boolean(values[ymd]?.[h.id]);
+    const s = calculateHabitScore(h, v, { hasStored });
     if (s != null && Number.isFinite(s)) sum += s;
   }
   return Math.round(sum * 10) / 10;
